@@ -1,0 +1,46 @@
+{
+    "name": "asiasea-ai/hf3",
+    "description": "TODO: 一句话描述这个 PHP 库的用途",
+    "type": "library",
+    "keywords": [
+        "php"
+    ],
+    "homepage": "https://github.com/asiasea-ai/hf3",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "asiasea-ai",
+            "email": "asiasea.ai@gmail.com",
+            "homepage": "https://github.com/asiasea-ai"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/asiasea-ai/hf3/issues",
+        "source": "https://github.com/asiasea-ai/hf3"
+    },
+    "require": {
+        "php": "^8.5"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^11.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "AsiaseaAi\\Hf3\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "AsiaseaAi\\Hf3\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit"
+    },
+    "config": {
+        "sort-packages": true,
+        "optimize-autoloader": true
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
