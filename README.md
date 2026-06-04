@@ -15,24 +15,6 @@
 composer require asiasea-ai/hf3
 ```
 
-## 使用
-
-```php
-use AsiaseaAi\Hf3\Hf3;
-
-$hf3 = new Hf3();
-
-echo $hf3->greet();          // Hello, world!
-echo $hf3->greet('asiasea'); // Hello, asiasea!
-```
-
-## 测试
-
-```bash
-composer install
-composer test
-```
-
 ## 许可协议
 
 [MIT](LICENSE)
