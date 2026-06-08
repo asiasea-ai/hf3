@@ -18,7 +18,13 @@ final class Schema
     /** @var array<string, array<string, array{name: string, type: string}>> "{connection}_{table}" → fields */
     private static array $cache = [];
 
-    /** @return array<string, array{name: string, type: string}> */
+    /**
+     * 内省单表结构 —— 物理表名映射成 ['col' => ['name', 'type']] 字典
+     *
+     * @param string $table
+     * @param string $connection
+     * @return array<string, array{name: string, type: string}>
+     */
     public static function inspect(string $table, string $connection = 'main'): array
     {
         $key = "{$connection}_{$table}";
@@ -62,7 +68,11 @@ final class Schema
         }
     }
 
-    /** 测试用 —— 清空所有 connection 的 cache */
+    /**
+     * 清空所有 connection 的 schema cache —— 测试用
+     *
+     * @return void
+     */
     public static function flush(): void
     {
         Schema::$cache = [];

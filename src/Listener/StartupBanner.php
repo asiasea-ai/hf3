@@ -4,13 +4,17 @@ declare(strict_types=1);
 
 namespace Hf3\Listener;
 
+use Composer\InstalledVersions;
 use Hf3\Util\BootLog;
 use Hyperf\Context\ApplicationContext;
 use Hyperf\Contract\ConfigInterface;
+use Hyperf\Crontab\Annotation\Crontab as CrontabAnnotation;
+use Hyperf\Di\Annotation\AnnotationCollector;
 use Hyperf\Event\Annotation\Listener;
 use Hyperf\Event\Contract\ListenerInterface;
 use Hyperf\Framework\Event\BeforeMainServerStart;
 use Hyperf\HttpServer\Router\DispatcherFactory;
+use Hyperf\Process\Annotation\Process as ProcessAnnotation;
 
 /**
  * 主 server 启动前打印环境信息卡: Swoole / MySQL / Redis / Route / Crontab / Processes.
@@ -29,46 +33,101 @@ class StartupBanner implements ListenerInterface
 
     public function process(object $event): void
     {
-        $this->sectionSwooleServer();
         $this->sectionRuntimeFolders();
-        $this->sectionMysqlPool();
-        $this->sectionRedisPool();
-        $this->sectionRouteLoader();
-        $this->sectionCrontabJobs();
-        $this->sectionCustomProcesses();
+        BootLog::sectionPair('Route Loader', $this->routeRows(), 'Workers', $this->workerRows());
+        BootLog::sectionPair('MySQL Pool (Hyperf)', $this->mysqlRows(), 'Redis Pool (Hyperf)', $this->redisRows());
+        BootLog::sectionPair('Crontab Jobs', $this->crontabRows(), 'Custom Processes', $this->processRows());
+        BootLog::sectionPair('Server', $this->serverRows(), 'Swoole Server', $this->swooleRows());
 
         BootLog::flush();
     }
 
-    private function sectionSwooleServer(): void
+    /**
+     * Server 概览行 —— 值由 Boot 监听器(BootApplication)生成并存入容器,这里只读取展示
+     * @return array<int, array{0: string, 1: string}>
+     */
+    private function serverRows(): array
+    {
+        $container = ApplicationContext::getContainer();
+        $read = static function (string $key) use ($container): string {
+            return $container->has($key) ? (string) $container->get($key) : 'unknown';
+        };
+        $hyperf = InstalledVersions::getPrettyVersion('hyperf/framework') ?? 'unknown';
+
+        return [
+            ['hostname',    $read('server.hostname')],
+            ['ip',          $read('server.ip')],
+            ['instance_id', $read('server.instance_id')],
+            ['run_time',    $read('server.run_time')],
+            ['php',         PHP_VERSION],
+            ['swoole',      SWOOLE_VERSION],
+            ['hyperf',      $hyperf],
+            ['app_env',     (string) ($_ENV['APP_ENV'] ?? 'dev')],
+        ];
+    }
+
+    /**
+     * @return array<int, array{0: string, 1: string}>
+     */
+    private function swooleRows(): array
     {
         $servers  = (array) $this->config->get('server.servers', []);
         $http     = $servers[0] ?? [];
         $settings = (array) $this->config->get('server.settings', []);
 
-        BootLog::section('Swoole Server', [
+        return [
             ['name',        (string) ($http['name'] ?? 'http')],
             ['listen',      ($http['host'] ?? '0.0.0.0') . ':' . ($http['port'] ?? '?')],
             ['worker_num',  (string) ($settings['worker_num'] ?? swoole_cpu_num())],
             ['max_request', (string) ($settings['max_request'] ?? 0)],
-            ['pid_file',    (string) ($settings['pid_file'] ?? '')],
             ['mode',        $this->modeName((int) $this->config->get('server.mode', SWOOLE_PROCESS))],
             ['coroutine',   ($settings['enable_coroutine'] ?? false) ? 'on' : 'off'],
-        ]);
+        ];
+    }
+
+    /**
+     * @return array<int, array{0: string, 1: string}|string>
+     */
+    private function workerRows(): array
+    {
+        $settings  = (array) $this->config->get('server.settings', []);
+        $workerNum = (int) ($settings['worker_num'] ?? swoole_cpu_num());
+
+        /** 只展示前几个,其余折叠成一行,末尾给总数 */
+        $preview  = 3;
+        $showCount = min($preview, $workerNum);
+
+        $rows = [];
+        for ($i = 0; $i < $showCount; $i++) {
+            $rows[] = ['Worker#' . $i, 'started'];
+        }
+        $rest = $workerNum - $showCount;
+        if ($rest > 0) {
+            $rows[] = ['...', '+' . $rest . ' more'];
+        }
+        $rows[] = ['total', (string) $workerNum];
+        return $rows;
     }
 
     private function sectionRuntimeFolders(): void
     {
+        $settings = (array) $this->config->get('server.settings', []);
+        $pidFile  = (string) ($settings['pid_file'] ?? RUNTIME_PATH . '/pid/hyperf.pid');
+
         BootLog::section('Runtime Folders', [
             ['base_path', BASE_PATH],
             ['runtime',   RUNTIME_PATH],
             ['pid',       RUNTIME_PATH . '/pid'],
+            ['pid_file',  $pidFile],
             ['log',       RUNTIME_PATH . '/logs'],
             ['container', RUNTIME_PATH . '/container'],
         ]);
     }
 
-    private function sectionMysqlPool(): void
+    /**
+     * @return array<int, array{0: string, 1: string}|string>
+     */
+    private function mysqlRows(): array
     {
         $databases = (array) $this->config->get('databases', []);
         $rows      = [];
@@ -90,12 +149,15 @@ class StartupBanner implements ListenerInterface
             $minObj ??= (int) ($conf['pool']['min_connections'] ?? 0);
         }
         if ($rows !== [] && $maxObj !== null) {
-            $rows[] = sprintf('pool: max=%d, min=%d (per worker)', $maxObj, $minObj);
+            $rows[] = sprintf('pool: max=%d, min=%d', $maxObj, $minObj);
         }
-        BootLog::section('MySQL Pool (Hyperf)', $rows);
+        return $rows;
     }
 
-    private function sectionRedisPool(): void
+    /**
+     * @return array<int, array{0: string, 1: string}|string>
+     */
+    private function redisRows(): array
     {
         $pools  = (array) $this->config->get('redis', []);
         $rows   = [];
@@ -116,12 +178,15 @@ class StartupBanner implements ListenerInterface
             $minObj ??= (int) ($conf['pool']['min_connections'] ?? 0);
         }
         if ($rows !== [] && $maxObj !== null) {
-            $rows[] = sprintf('pool: max=%d, min=%d (per worker)', $maxObj, $minObj);
+            $rows[] = sprintf('pool: max=%d, min=%d', $maxObj, $minObj);
         }
-        BootLog::section('Redis Pool (Hyperf)', $rows);
+        return $rows;
     }
 
-    private function sectionRouteLoader(): void
+    /**
+     * @return array<int, array{0: string, 1: string}|string>
+     */
+    private function routeRows(): array
     {
         try {
             $factory = ApplicationContext::getContainer()->get(DispatcherFactory::class);
@@ -147,42 +212,93 @@ class StartupBanner implements ListenerInterface
                 $rows[] = [$m, (string) $n];
             }
             $rows[] = ['total', (string) $count];
-            BootLog::section('Route Loader', $rows);
+            return $rows;
         } catch (\Throwable $e) {
-            BootLog::section('Route Loader', [['error', BootLog::red($e->getMessage())]]);
+            return [['error', BootLog::red($e->getMessage())]];
         }
     }
 
-    private function sectionCrontabJobs(): void
+    /**
+     * @return array<int, array{0: string, 1: string}|string>
+     */
+    private function crontabRows(): array
     {
-        $jobs = (array) $this->config->get('crontab.crontab', []);
-        $rows = [];
-        foreach ($jobs as $job) {
+        $configJobs = (array) $this->config->get('crontab.crontab', []);
+        $classJobs  = AnnotationCollector::getClassesByAnnotation(CrontabAnnotation::class);
+        $methodJobs = AnnotationCollector::getMethodsByAnnotation(CrontabAnnotation::class);
+
+        /** 按任务名去重(配置式 + 类级注解 + 方法级注解) */
+        $jobs = [];
+        foreach ($configJobs as $job) {
             if (is_array($job)) {
-                $rows[] = [(string) ($job['name'] ?? $job['callback'] ?? 'anonymous'), (string) ($job['rule'] ?? '')];
+                $name = (string) ($job['name'] ?? $job['callback'] ?? 'anonymous');
+                $rule = (string) ($job['rule'] ?? '');
+                $jobs[$name] = [$name, $rule];
             } elseif (is_object($job) && method_exists($job, 'getName') && method_exists($job, 'getRule')) {
-                $rows[] = [(string) $job->getName(), (string) $job->getRule()];
+                $name = (string) $job->getName();
+                $rule = (string) $job->getRule();
+                $jobs[$name] = [$name, $rule];
             }
         }
-        if ($rows === []) {
-            $rows[] = ['(none)', 'add to config/autoload/crontab.php'];
+        foreach ($classJobs as $annotation) {
+            if ($annotation instanceof CrontabAnnotation) {
+                $name = (string) ($annotation->name ?? 'anonymous');
+                $rule = (string) ($annotation->rule ?? '');
+                $jobs[$name] = [$name, $rule];
+            }
         }
-        $rows[] = ['total', (string) (count($rows) - ($jobs === [] ? 1 : 0))];
-        BootLog::section('Crontab Jobs', $rows);
+        foreach ($methodJobs as $item) {
+            $annotation = $item['annotation'] ?? null;
+            if ($annotation instanceof CrontabAnnotation) {
+                $name = (string) ($annotation->name ?? 'anonymous');
+                $rule = (string) ($annotation->rule ?? '');
+                $jobs[$name] = [$name, $rule];
+            }
+        }
+
+        if ($jobs === []) {
+            return [['(none)', 'no #[Crontab] / config']];
+        }
+
+        $rows = array_values($jobs);
+        $rows[] = ['total', (string) count($jobs)];
+        return $rows;
     }
 
-    private function sectionCustomProcesses(): void
+    /**
+     * @return array<int, array{0: string, 1: string}|string>
+     */
+    private function processRows(): array
     {
-        $processes = (array) $this->config->get('processes', []);
-        $rows = [];
-        foreach ($processes as $p) {
-            $rows[] = is_string($p) ? $p : (is_object($p) ? $p::class : 'unknown');
+        $configProcesses     = (array) $this->config->get('processes', []);
+        $annotationProcesses = AnnotationCollector::getClassesByAnnotation(ProcessAnnotation::class);
+
+        /** 按类名去重(配置式 + #[Process] 注解式),只展示短名,不显示完整类路径 */
+        $procs = [];
+        foreach ($configProcesses as $p) {
+            $class = is_string($p) ? $p : (is_object($p) ? $p::class : 'unknown');
+            $short = $this->classShortName($class);
+            $procs[$class] = [$short, 'config'];
         }
-        if ($rows === []) {
-            $rows[] = '(none)';
+        foreach ($annotationProcesses as $class => $annotation) {
+            $name = $annotation instanceof ProcessAnnotation ? (string) ($annotation->name ?? '') : '';
+            $short = $name !== '' ? $name : $this->classShortName($class);
+            $procs[$class] = [$short, '#[Process]'];
         }
-        $rows[] = 'total: ' . (string) count($processes);
-        BootLog::section('Custom Processes', $rows);
+
+        if ($procs === []) {
+            return [['(none)', '']];
+        }
+
+        $rows = array_values($procs);
+        $rows[] = ['total', (string) count($procs)];
+        return $rows;
+    }
+
+    private function classShortName(string $class): string
+    {
+        $pos = strrpos($class, '\\');
+        return $pos === false ? $class : substr($class, $pos + 1);
     }
 
     private function modeName(int $mode): string

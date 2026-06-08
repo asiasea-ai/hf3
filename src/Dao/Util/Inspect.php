@@ -13,6 +13,9 @@ use Hf3\Throwable\Exception\ErrorException;
 final class Inspect
 {
     /**
+     * 由 Model FQCN 推导其对应的 Listing 拼装工具类 FQCN
+     *
+     * @param BaseModel $model
      * @return class-string<Listing>
      */
     public static function listingUtilClass(BaseModel $model): string
@@ -29,7 +32,7 @@ final class Inspect
      * @return string
      * @throws ErrorException Schema 不可读或表无列时
      */
-    public static function selectCols(BaseModel $model): string
+    public static function selectField(BaseModel $model): string
     {
         $allCols = Field::select($model::class);
         if ($allCols === []) {

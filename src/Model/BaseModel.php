@@ -10,6 +10,7 @@ use Hf3\Model\Util\Adapter;
 use Hf3\Model\Util\Auto;
 use Hf3\Model\Util\Field;
 use Hf3\Model\Util\Save;
+use Hf3\Model\Util\Subject;
 use Hf3\Model\Util\Table;
 use Hf3\Throwable\Exception\ErrorException;
 use Hf3\Throwable\Exception\WarnException;
@@ -18,7 +19,8 @@ use Hyperf\DbConnection\Db;
 
 abstract class BaseModel
 {
-    protected string $connection = 'main';
+    /** 数据库连接池名 —— 子类按需重写为别的库(如 const CONNECTION = 'report';),Listing 会自动跟随 */
+    public const string CONNECTION = 'main';
 
     public const string TYPE = 'NORMAL';
 
@@ -26,6 +28,8 @@ abstract class BaseModel
 
     /**
      * 获取物理表名 —— 走 Table::get 路由(NORMAL 直返 NAME,PART 分表抛错指向 PartTable)
+     *
+     * @return string
      */
     public static function tableName(): string
     {
@@ -34,6 +38,8 @@ abstract class BaseModel
 
     /**
      * 获取当前 Model 的枚举字典 —— Schema 当前不返 enum value/alias,本方法永远返 []
+     *
+     * @return array
      */
     public static function enum(): array
     {
@@ -42,10 +48,13 @@ abstract class BaseModel
 
     /**
      * 获取字段中文名 —— schema 错配(找不到字段中文名)抛 ErrorException,记日志
+     *
+     * @param string $key
+     * @return string
      */
     public static function fieldName(string $key): string
     {
-        $name = Schema::inspect(static::NAME)[$key]['name'] ?? null;
+        $name = Schema::inspect(static::NAME, static::CONNECTION)[$key]['name'] ?? null;
         if (superEmpty($name)) {
             throw new ErrorException(Code::FIELD_NOT_FOUND);
         }
@@ -58,17 +67,24 @@ abstract class BaseModel
      */
     public function schemaInfo(): array
     {
-        return Schema::inspect(static::NAME, $this->connection);
+        return Schema::inspect(static::NAME, static::CONNECTION);
     }
 
     /**
      * delete —— 软删(若 FIELDS 含 delete_flg)或硬删,WHERE 走 AND 等值
+     *
+     * @param array $where
+     * @param int|null $limit
+     * @return int
      */
     final public function delete(array $where, ?int $limit = null): int
     {
         /** 清理删除条件 */
         $columns = Field::select(static::class);
         $where = Field::clean($columns, $where);
+
+        /** 受管表强制注入当前主体过滤 */
+        $where = Subject::enforce($columns, $where);
 
         /** 删除条件或表字段不能为空 */
         if ($where === [] || $columns === []) {
@@ -80,7 +96,7 @@ abstract class BaseModel
         $deleteField = Field::deleteFlg($columns);
 
         /** 拼接删除条件 */
-        $qb = Db::connection($this->connection)->table($tableName);
+        $qb = Db::connection(static::CONNECTION)->table($tableName);
         foreach ($where as $key => $value) {
             $qb->where($key, $value);
         }
@@ -90,8 +106,9 @@ abstract class BaseModel
             $qb->limit($limit);
         }
 
-        /** sql 注入检测 */
+        /** sql 注入检测 + 主体隔离检测 */
         Util\Safe::inject($qb->toSql());
+        Util\Safe::subject($qb->toSql(), static::CONNECTION);
 
         /** 软删除 */
         if (!superEmpty($deleteField)) {
@@ -106,6 +123,10 @@ abstract class BaseModel
 
     /**
      * listing —— 裸 SQL 多行查询(复杂 join / 聚合 / 方言)
+     *
+     * @param string $sql
+     * @param array $params
+     * @return array
      */
     final public function listing(string $sql, array $params = []): array
     {
@@ -114,8 +135,11 @@ abstract class BaseModel
         /** SQL 注入检测 */
         Util\Safe::inject($sql);
 
+        /** 主体隔离检测:SQL 涉及的每张受管表都必须按主体列过滤 */
+        Util\Safe::subject($sql, static::CONNECTION);
+
         /** 获取查询结果 */
-        $rows = Db::connection($this->connection)->select($sql, $params);
+        $rows = Db::connection(static::CONNECTION)->select($sql, $params);
         $rows = array_map(static fn(object $r): array => (array)$r, $rows);
 
         /** 数据转换*/
@@ -125,13 +149,20 @@ abstract class BaseModel
 
     /**
      * row —— 裸 SQL 单行查询
+     *
+     * @param string $sql
+     * @param array $params
+     * @return array|null
      */
     final public function row(string $sql, array $params = []): ?array
     {
         Util\Safe::bind($sql);
         Util\Safe::inject($sql);
 
-        $rows = Db::connection($this->connection)->select($sql, $params);
+        /** 主体隔离检测:SQL 涉及的每张受管表都必须按主体列过滤 */
+        Util\Safe::subject($sql, static::CONNECTION);
+
+        $rows = Db::connection(static::CONNECTION)->select($sql, $params);
         if ($rows === []) {
             return null;
         }
@@ -143,23 +174,39 @@ abstract class BaseModel
 
     /**
      * exec —— 裸 SQL 副作用语句(DDL / 不规则 DML)
+     *
+     * @param string $sql
+     * @param array $params
+     * @return int
      */
     final public function exec(string $sql, array $params = []): int
     {
         Util\Safe::bind($sql);
         Util\Safe::inject($sql);
 
-        return Db::connection($this->connection)->affectingStatement($sql, $params);
+        /** 主体隔离检测:SQL 涉及的每张受管表都必须按主体列过滤 */
+        Util\Safe::subject($sql, static::CONNECTION);
+
+        return Db::connection(static::CONNECTION)->affectingStatement($sql, $params);
     }
 
     /**
      * update —— 主键禁改;update_time / update_account_id 自动补
+     *
+     * @param array $data
+     * @param array $where
+     * @param int|null $numRows
+     * @return int
      */
     final public function update(array $data = [], array $where = [], ?int $numRows = null): int
     {
         $columns = Field::select(static::class);
         $data = Field::clean($columns, $data);
         $where = Field::clean($columns, $where);
+
+        /** 受管表:WHERE 强制带主体,data 剥离主体列(禁止经 update 改主体归属) */
+        $where = Subject::enforce($columns, $where);
+        $data = Subject::strip($columns, $data);
 
         if ($data === [] || $where === []) {
             return 0;
@@ -179,7 +226,7 @@ abstract class BaseModel
         $data += Auto::time($columns, 'update_time');
         $data += Auto::accountId($columns, 'update');
 
-        $qb = Db::connection($this->connection)->table($table);
+        $qb = Db::connection(static::CONNECTION)->table($table);
         foreach ($where as $key => $value) {
             $qb->where($key, $value);
         }
@@ -189,6 +236,7 @@ abstract class BaseModel
         }
 
         Util\Safe::inject($qb->toSql());
+        Util\Safe::subject($qb->toSql(), static::CONNECTION);
 
         return $qb->update($data);
     }
@@ -204,6 +252,9 @@ abstract class BaseModel
         $columns = Field::select(static::class);
         $data = Field::clean($columns, $data);
 
+        /** 受管表强制注入当前主体 */
+        $data = Subject::enforce($columns, $data);
+
         if ($data === []) {
             throw new ErrorException(Code::MODEL_SAVE_FIELD_NULL);
         }
@@ -216,12 +267,13 @@ abstract class BaseModel
         $table = static::tableName();
         ['bind' => $bind, 'sql' => $sql] = Save::all($table, [$data]);
 
-        /** 参数绑定检测 注入检测 */
+        /** 参数绑定检测 注入检测 主体隔离检测 */
         Util\Safe::bind($sql);
         Util\Safe::inject($sql);
+        Util\Safe::subject($sql, static::CONNECTION);
 
         /** @var Connection $conn */
-        $conn = Db::connection($this->connection);
+        $conn = Db::connection(static::CONNECTION);
 
         /** 入库 */
         $conn->insert($sql, $bind);
@@ -243,7 +295,16 @@ abstract class BaseModel
         /** Field::clean 过滤非表列;array_diff_key 再剔掉框架管控的审计字段(外部传入丢弃) */
         $managedFlip = array_flip(Auto::managed());
         $dataList = array_map(
-            static fn(array $row): array => array_diff_key(Field::clean($columns, $row), $managedFlip),
+            static function (array $row) use ($columns, $managedFlip): array {
+                $cleaned = Field::clean($columns, $row);
+                return array_diff_key($cleaned, $managedFlip);
+            },
+            $dataList,
+        );
+
+        /** 受管表逐行强制注入当前主体 */
+        $dataList = array_map(
+            static fn(array $row): array => Subject::enforce($columns, $row),
             $dataList,
         );
 
@@ -260,8 +321,9 @@ abstract class BaseModel
 
         Util\Safe::bind($sql);
         Util\Safe::inject($sql);
+        Util\Safe::subject($sql, static::CONNECTION);
 
-        return Db::connection($this->connection)->affectingStatement($sql, $bind);
+        return Db::connection(static::CONNECTION)->affectingStatement($sql, $bind);
     }
 
     /**
@@ -271,12 +333,18 @@ abstract class BaseModel
      * 例:['code' => 'X']  → WHERE code = 'X'
      *    ['code' => ['A', 'B']] → WHERE code IN ('A','B')
      *
+     * @param array $where
+     * @param array $fields
+     * @return array|null
      */
     final public function find(array $where = [], array $fields = []): ?array
     {
         /** 清理无关字段 */
         $columns = Field::select(static::class);
         $where = Field::clean($columns, $where);
+
+        /** 受管表强制注入当前主体过滤 */
+        $where = Subject::enforce($columns, $where);
 
         if ($where === [] || $columns === []) {
             throw new ErrorException(Code::MODEL_FIND_ONE_FIELD_NULL);
@@ -295,7 +363,7 @@ abstract class BaseModel
         }
 
         /** 执行查询 —— scalar 走 where(=),array 走 whereIn */
-        $qb = Db::connection($this->connection)->table($tableName)->select($fields);
+        $qb = Db::connection(static::CONNECTION)->table($tableName)->select($fields);
         foreach ($where as $col => $val) {
             if (is_array($val)) {
                 $qb->whereIn($col, $val);
@@ -303,6 +371,9 @@ abstract class BaseModel
                 $qb->where($col, $val);
             }
         }
+
+        /** 主体隔离检测 —— 受管表必须按主体列过滤 */
+        Util\Safe::subject($qb->toSql(), static::CONNECTION);
 
         /** 查询结果 */
         $rows = $qb->get()->toArray();

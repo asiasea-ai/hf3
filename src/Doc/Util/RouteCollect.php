@@ -11,14 +11,11 @@ use Hyperf\HttpServer\Router\Handler;
 
 /**
  * 从 Hyperf 已注册路由表里拉出所有 [method, path, ctrl, action, middlewares].
- *
- * FastRoute getData() 返 [static, variable]:
- *   static  = [method => [path => Handler]]
- *   variable = [method => [{regex, routeMap: [id => [Handler, vars]]}, ...]]
  */
 final class RouteCollect
 {
     /**
+     * 收集指定 server 已注册的全部路由
      * @return array<int, array{
      *     method: string,
      *     path: string,
@@ -33,6 +30,7 @@ final class RouteCollect
         $container = ApplicationContext::getContainer();
         $factory   = $container->get(DispatcherFactory::class);
         $collector = $factory->getRouter($serverName);
+        /** FastRoute getData() 返 [static, variable]:static=[method=>[path=>Handler]],variable=[method=>[{regex, routeMap:[id=>[Handler, vars]]}, ...]] */
         $data      = $collector->getData();
 
         $out = [];

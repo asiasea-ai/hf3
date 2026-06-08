@@ -54,8 +54,9 @@ abstract class BaseService
     }
 
     /**
-     * findById
-     * @param int $id
+     * 按主键 id 查询单行,无命中返 null
+     *
+     * @param int $id 主键
      * @return array|null
      */
     public function findById(int $id): ?array
@@ -64,9 +65,10 @@ abstract class BaseService
     }
 
     /**
-     * save
-     * @param array $params
-     * @return int
+     * 新增一行记录,返回新增行主键 id
+     *
+     * @param array $params 待写入字段
+     * @return int 新增行主键 id
      */
     public function save(array $params): int
     {
@@ -74,10 +76,11 @@ abstract class BaseService
     }
 
     /**
-     * updateById
-     * @param int $id
-     * @param array $params
-     * @return int
+     * 按主键 id 更新记录,返回受影响行数
+     *
+     * @param int $id 主键
+     * @param array $params 待更新字段
+     * @return int 受影响行数
      */
     public function updateById(int $id, array $params): int
     {
@@ -85,9 +88,10 @@ abstract class BaseService
     }
 
     /**
-     * deleteById
-     * @param int $id
-     * @return int
+     * 按主键 id 删除记录,返回受影响行数
+     *
+     * @param int $id 主键
+     * @return int 受影响行数
      */
     public function deleteById(int $id): int
     {

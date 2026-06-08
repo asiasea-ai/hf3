@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Hf3\Identity;
 
 use App\Lib\Oidc\Util\Jwks;
@@ -14,6 +16,12 @@ use Psr\Http\Message\ServerRequestInterface;
 
 class Jwt
 {
+    /**
+     * 不验签, 仅窥视 JWT header 取出 kid
+     * @param string $token 原始 JWT 字符串
+     * @return string|null header.kid, 缺失返 null
+     * @throws WarnException token 段数非 3 即格式非法
+     */
     public static function getKid(string $token): ?string
     {
         /** 不验签先窥视 header.kid */

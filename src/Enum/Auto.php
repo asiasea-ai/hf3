@@ -7,8 +7,7 @@ namespace Hf3\Enum;
 use Hf3\Enum\Util\Scan;
 
 /**
- * 聚合 App/Module/<L1>/<L2>/Constant/Enum.php 的全量枚举字典,首访扫盘+反射,二访进程内 O(1).
- * 对外只暴露 alias,table.column → alias 映射通过 aliases() / lookup() 反查.
+ * 聚合各子模块枚举字典,对外只暴露 alias,table.column 经 aliases() / lookup() 反查.
  */
 final class Auto
 {
@@ -27,6 +26,7 @@ final class Auto
      */
     public static function all(): array
     {
+        /** 首访扫盘 + 反射聚合 App/Module/<L1>/<L2>/Constant/Enum.php,命中进程内 cache 则 O(1) 返回 */
         if (Auto::$allCache !== null) {
             return Auto::$allCache;
         }

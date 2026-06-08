@@ -10,13 +10,19 @@ use Hf3\Throwable\Enum\Level;
 
 /**
  * Token 异常 —— 验签失败 / iss 不匹配 / aud 不匹配 / 已过期.
- *
- * level 默认 Warning (HTTP 400), category 默认 'token'.
  */
 final class TokenException extends AbstractException
 {
     private const string DEFAULT_CATEGORY = 'token';
 
+    /**
+     * 按业务码构造 Token 异常,沿用默认 HTTP 状态码
+     *
+     * @param CodeInterface $code 业务码
+     * @param string|null $message 自定义提示文案,为空时使用业务码默认文案
+     * @param string|null $category 异常分类,为空时使用默认分类 token
+     * @return self
+     */
     public static function fromCode(
         CodeInterface $code,
         ?string $message = null,
@@ -29,6 +35,15 @@ final class TokenException extends AbstractException
         );
     }
 
+    /**
+     * 按业务码构造 Token 异常并显式指定 HTTP 状态码
+     *
+     * @param CodeInterface $code 业务码
+     * @param int $httpStatus 指定的 HTTP 状态码
+     * @param string|null $message 自定义提示文案,为空时使用业务码默认文案
+     * @param string|null $category 异常分类,为空时使用默认分类 token
+     * @return self
+     */
     public static function withHttpStatus(
         CodeInterface $code,
         int $httpStatus,
@@ -45,6 +60,7 @@ final class TokenException extends AbstractException
 
     public function level(): Level
     {
+        // 默认 Warning 级别（对应 HTTP 400），token 问题归为客户端凭证问题
         return Level::Warning;
     }
 }

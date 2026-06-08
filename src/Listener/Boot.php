@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Hf3\Listener;
 
-use Hf3\Util\BootLog;
 use Hyperf\Event\Annotation\Listener;
 use Hyperf\Event\Contract\ListenerInterface;
 use Hyperf\Framework\Event\BootApplication;
@@ -34,17 +33,5 @@ readonly class Boot implements ListenerInterface
         $this->container->set('server.run_time', $runTime);
         $this->container->set('server.hostname', $hostname);
         $this->container->set('server.ip', $ip);
-
-        BootLog::section('Server', [
-            ['hostname',    $hostname],
-            ['ip',          $ip],
-            ['instance_id', $instanceId],
-            ['run_time',    $runTime],
-            ['php',         PHP_VERSION],
-            ['swoole',      SWOOLE_VERSION],
-            ['hyperf',      \Composer\InstalledVersions::getPrettyVersion('hyperf/framework') ?? 'unknown'],
-            ['base_path',   BASE_PATH],
-            ['app_env',     (string) ($_ENV['APP_ENV'] ?? 'dev')],
-        ]);
     }
 }

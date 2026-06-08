@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Hf3\Throwable\Util;
 
 use Hyperf\Context\ApplicationContext;
+use Hyperf\Contract\StdoutLoggerInterface;
 use Hyperf\Logger\LoggerFactory;
 use Psr\Log\LoggerInterface;
 
@@ -28,6 +29,23 @@ final class HyperfLogger
             }
             $factory = $container->get(LoggerFactory::class);
             return $factory->get($channel, $group);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * 取 stdout(控制台)logger —— 前台运行时直接打到终端,失败返 null
+     * @return StdoutLoggerInterface|null
+     */
+    public static function stdout(): ?StdoutLoggerInterface
+    {
+        try {
+            $container = ApplicationContext::getContainer();
+            if (!$container->has(StdoutLoggerInterface::class)) {
+                return null;
+            }
+            return $container->get(StdoutLoggerInterface::class);
         } catch (\Throwable) {
             return null;
         }

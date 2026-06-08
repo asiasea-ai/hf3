@@ -8,9 +8,16 @@ class BootLog
 {
     private const int WIDTH = 90;
 
-    private const int INNER_WIDTH = 86;
-
     private const int KEY_WIDTH = 22;
+
+    /** 并排两卡时单卡宽度(44 + 2 间隔 + 44 = 90,与全宽对齐) */
+    private const int HALF_WIDTH = 44;
+
+    /** 并排两卡时的 key 列宽(半宽卡内容窄,缩窄 key 列) */
+    private const int HALF_KEY_WIDTH = 12;
+
+    /** 并排两卡之间的水平间隔 */
+    private const string PAIR_GAP = '  ';
 
     private const string ELLIPSIS = '…';
 
@@ -44,6 +51,24 @@ class BootLog
     }
 
     /**
+     * 添加两个并排(左右布局)的段落
+     * @param string $titleA
+     * @param array $rowsA
+     * @param string $titleB
+     * @param array $rowsB
+     * @return void
+     */
+    public static function sectionPair(string $titleA, array $rowsA, string $titleB, array $rowsB): void
+    {
+        if (!BootLog::enabled()) {
+            return;
+        }
+        $cardA = ['title' => $titleA, 'rows' => $rowsA];
+        $cardB = ['title' => $titleB, 'rows' => $rowsB];
+        BootLog::$buffer[] = ['pair' => [$cardA, $cardB]];
+    }
+
+    /**
      * 输出所有段落
      * @return void
      */
@@ -55,9 +80,15 @@ class BootLog
         }
 
         echo PHP_EOL;
+        $palette = count(BootLog::PALETTE);
         foreach (BootLog::$buffer as $i => $entry) {
-            $color = BootLog::PALETTE[$i % count(BootLog::PALETTE)];
-            BootLog::renderCard($color, $entry['title'], $entry['rows']);
+            $color = BootLog::PALETTE[$i % $palette];
+            if (isset($entry['pair'])) {
+                $colorB = BootLog::PALETTE[($i + 1) % $palette];
+                BootLog::renderPair($color, $entry['pair'][0], $colorB, $entry['pair'][1]);
+            } else {
+                BootLog::renderCard($color, $entry['title'], $entry['rows']);
+            }
             echo PHP_EOL;
         }
         BootLog::$buffer = [];
@@ -102,21 +133,73 @@ class BootLog
      */
     private static function renderCard(string $color, string $title, array $rows): void
     {
+        $lines = BootLog::buildCardLines($color, $title, $rows, BootLog::WIDTH, BootLog::KEY_WIDTH);
+        foreach ($lines as $line) {
+            echo $line . PHP_EOL;
+        }
+    }
+
+    /**
+     * 并排渲染两张卡片(左右布局)
+     * @param string $colorA
+     * @param array $cardA ['title' => string, 'rows' => array]
+     * @param string $colorB
+     * @param array $cardB ['title' => string, 'rows' => array]
+     * @return void
+     */
+    private static function renderPair(string $colorA, array $cardA, string $colorB, array $cardB): void
+    {
+        /** 先把两卡的内容行补齐到相同行数(空行填充),保证等高、底边对齐 */
+        $rowsA = $cardA['rows'];
+        $rowsB = $cardB['rows'];
+        $maxRows = max(count($rowsA), count($rowsB));
+        while (count($rowsA) < $maxRows) {
+            $rowsA[] = '';
+        }
+        while (count($rowsB) < $maxRows) {
+            $rowsB[] = '';
+        }
+
+        $linesA = BootLog::buildCardLines($colorA, $cardA['title'], $rowsA, BootLog::HALF_WIDTH, BootLog::HALF_KEY_WIDTH);
+        $linesB = BootLog::buildCardLines($colorB, $cardB['title'], $rowsB, BootLog::HALF_WIDTH, BootLog::HALF_KEY_WIDTH);
+
+        $rowCount = max(count($linesA), count($linesB));
+        $blank = str_repeat(' ', BootLog::HALF_WIDTH);
+        for ($i = 0; $i < $rowCount; $i++) {
+            $left = $linesA[$i] ?? $blank;
+            $right = $linesB[$i] ?? $blank;
+            echo $left . BootLog::PAIR_GAP . $right . PHP_EOL;
+        }
+    }
+
+    /**
+     * 构建卡片的所有行(含边框),按指定宽度 —— 返回字符串数组,供单卡 echo 或并排拼接
+     * @param string $color
+     * @param string $title
+     * @param array $rows
+     * @param int $width 卡片总宽
+     * @param int $keyWidth key 列宽
+     * @return array<int, string>
+     */
+    private static function buildCardLines(string $color, string $title, array $rows, int $width, int $keyWidth): array
+    {
         $reset = BootLog::C_RESET;
+        $inner = $width - 4;
+        $lines = [];
 
         $titleSeg = ' ' . $title . ' ';
         $titleLen = BootLog::visibleLength($titleSeg);
-        $dashCount = max(0, BootLog::WIDTH - 1 - 2 - $titleLen - 1);
-        echo $color . '╭──' . $reset . $titleSeg . $color . str_repeat('─', $dashCount) . '╮' . $reset . PHP_EOL;
+        $dashCount = max(0, $width - 1 - 2 - $titleLen - 1);
+        $lines[] = $color . '╭──' . $reset . $titleSeg . $color . str_repeat('─', $dashCount) . '╮' . $reset;
 
         if ($rows === []) {
-            BootLog::renderRow($color, BootLog::C_DIM . '(empty)' . $reset);
+            $lines[] = BootLog::buildRowLine($color, BootLog::C_DIM . '(empty)' . $reset, $inner);
         }
         foreach ($rows as $row) {
             if (is_array($row)) {
                 [$k, $v] = $row;
                 $content = sprintf(
-                    '%s%-' . BootLog::KEY_WIDTH . 's%s %s',
+                    '%s%-' . $keyWidth . 's%s %s',
                     BootLog::C_KEY,
                     $k,
                     $reset,
@@ -125,27 +208,29 @@ class BootLog
             } else {
                 $content = (string) $row;
             }
-            BootLog::renderRow($color, $content);
+            $lines[] = BootLog::buildRowLine($color, $content, $inner);
         }
 
-        echo $color . '╰' . str_repeat('─', BootLog::WIDTH - 2) . '╯' . $reset . PHP_EOL;
+        $lines[] = $color . '╰' . str_repeat('─', $width - 2) . '╯' . $reset;
+        return $lines;
     }
 
     /**
-     * 渲染行
+     * 构建单行(含左右边框),按指定内容宽度做截断/补齐
      * @param string $color
      * @param string $content
-     * @return void
+     * @param int $inner 内容区宽度
+     * @return string
      */
-    private static function renderRow(string $color, string $content): void
+    private static function buildRowLine(string $color, string $content, int $inner): string
     {
         $vlen = BootLog::visibleLength($content);
-        if ($vlen > BootLog::INNER_WIDTH) {
-            $content = BootLog::truncate($content, BootLog::INNER_WIDTH);
+        if ($vlen > $inner) {
+            $content = BootLog::truncate($content, $inner);
         } else {
-            $content = $content . str_repeat(' ', BootLog::INNER_WIDTH - $vlen);
+            $content = $content . str_repeat(' ', $inner - $vlen);
         }
-        echo $color . '│' . BootLog::C_RESET . ' ' . $content . ' ' . $color . '│' . BootLog::C_RESET . PHP_EOL;
+        return $color . '│' . BootLog::C_RESET . ' ' . $content . ' ' . $color . '│' . BootLog::C_RESET;
     }
 
     /**

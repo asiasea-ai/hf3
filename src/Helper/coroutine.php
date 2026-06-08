@@ -9,6 +9,12 @@ use Hyperf\Coroutine\Coroutine;
 use Hyperf\Coroutine\WaitGroup;
 use Hyperf\Logger\LoggerFactory;
 
+/**
+ * 安全地起一个协程执行 callable, 内部捕获异常并写 logger, 不让异常逃逸到调度器
+ * @param callable $callable 要在协程中执行的逻辑
+ * @param mixed ...$args 透传给 callable 的参数
+ * @return int 新协程的 ID
+ */
 function easyGo(callable $callable, mixed ...$args): int
 {
     return Coroutine::fork(static function () use ($callable, $args): void {
@@ -20,6 +26,12 @@ function easyGo(callable $callable, mixed ...$args): int
     });
 }
 
+/**
+ * 并发执行一组任务并按原 key 收集结果, 全部完成或超时后返回
+ * @param array $tasks key => callable 的任务表
+ * @param float $timeout 等待全部完成的超时秒数
+ * @return array 与入参同 key 的结果表; 超时抛 ErrorException, 有任务异常则逐条写 logger 后抛首个异常
+ */
 function waitGroup(array $tasks, float $timeout = 3.0): array
 {
     if ($tasks === []) {

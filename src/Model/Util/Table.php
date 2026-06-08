@@ -12,6 +12,7 @@ final class Table
     /**
      * Model FQCN → 物理表名 —— 读 NAME 常量,缺则抛错;PART 分表后续接 PartTable
      * @param class-string $modelClass
+     * @return string
      */
     public static function get(string $modelClass): string
     {

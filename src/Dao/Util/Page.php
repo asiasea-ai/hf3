@@ -5,24 +5,15 @@ declare(strict_types=1);
 namespace Hf3\Dao\Util;
 
 /**
- * cursor 分页一站式工具类 —— encode/decode opaque token + tailSize + cursors 边界拣选.
- *
- * 4 个静态方法:
- *   - encode:    把 payload(如 [create_time, id])打包成 base64(json) token
- *   - decode:    把 token 解出 payload 数组,无效 token 返 null
- *   - tailSize:  last 模式按 total 反推尾页 LIMIT 行数
- *   - cursors:   按 page_mode + 是否还有下一页,决定 prev/next 拿哪行做边界
- *
- * encoder 由 caller 提供(闭包),Page::cursors 跟具体 payload 格式解耦;
- * 大多数 caller 用 Page::encode + 固定字段就够,见 BaseService::listing 调用样例.
- *
- * 安全提示:base64(json) 不加密,前端能 decode 看到 payload;仅作"opaque token"语义约定,
- * 不要让客户端构造,id 等敏感字段不进 payload.
+ * cursor 分页工具类 —— token 编解码 + 尾页行数 + 边界游标拣选.
  */
 final class Page
 {
     /**
      * 编码 payload 成 base64(json) 字符串
+     *
+     * base64(json) 不加密,前端能 decode 看到 payload;仅作 opaque token 语义约定,敏感字段不进 payload.
+     *
      * @param array<string, mixed> $payload 边界行的 sort key 值,如 ['create_time' => '2026-...', 'id' => 123]
      * @return string base64 编码的 cursor token
      */

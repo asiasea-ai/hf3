@@ -17,10 +17,10 @@ final class Hydrator
     private static ?ValidatorInterface $validator = null;
 
     /**
-     * hydrate
-     * @param string $dtoClass
-     * @param array $input
-     * @return object
+     * 把输入数组按构造器签名填充并校验, 生成 DTO 实例
+     * @param string $dtoClass 目标 DTO 的类名
+     * @param array $input 待填充的输入数据
+     * @return object 填充并校验后的 DTO 实例
      */
     public static function hydrate(string $dtoClass, array $input): object
     {

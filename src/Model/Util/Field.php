@@ -17,6 +17,7 @@ class Field
      * 入参语义跟 Field::select() / Field::clean() 对齐 —— 都是 **list of 列名**,不是 FIELDS map.
      * 若调用方手里是 FIELDS map,先 array_keys() 再传进来.
      * @param list<string> $columns 列名 list(常通过 Field::select(static::class) 取得)
+     * @return string
      */
     public static function deleteFlg(array $columns): string
     {

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Hf3\Middleware;
 
-use Hf3\Whitelist\Util\Cidr;
+use Hf3\Middleware\Util\Limiter;
 use Hyperf\HttpServer\Response;
 use Hyperf\RateLimit\Handler\RateLimitHandler;
 use Psr\Http\Message\ResponseInterface;
@@ -12,47 +12,40 @@ use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 
+/**
+ * 全局兜底限流：白名单豁免后按序施加 全站总量 → IP → 路由 三档令牌桶，任一档耗尽即 429.
+ */
 final class RateLimit implements MiddlewareInterface
 {
     public function __construct(private readonly RateLimitHandler $handler)
     {
     }
 
+    /**
+     * 全局限流入口，桶存 Redis 跨 worker/节点共享
+     * @param ServerRequestInterface $request
+     * @param RequestHandlerInterface $handler
+     * @return ResponseInterface
+     */
     public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
     {
-        $ip   = $this->clientIp($request);
+        $ip   = Limiter::clientIp($request);
         $path = $request->getUri()->getPath();
 
-        $ipConfig    = (array) etc('limiter.ip', []);
-        $routeConfig = (array) etc('limiter.route', []);
+        $globalConfig = (array) etc('limiter.global', []);
+        $ipConfig     = (array) etc('limiter.ip', []);
+        $routeConfig  = (array) etc('limiter.route', []);
 
-        // 1) IP 白名单豁免
-        if ($this->ipInWhitelist($ip, $ipConfig)) {
+        $exempt = Limiter::exempt($ipConfig, $ip, $path);
+        if ($exempt) {
             return $handler->handle($request);
         }
 
-        // 2) 路径白名单豁免
-        $pathWhitelist = (array) ($ipConfig['path_whitelist'] ?? []);
-        if (in_array($path, $pathWhitelist, true)) {
-            return $handler->handle($request);
-        }
-
-        // 3) IP 全局 QPS —— 令牌桶
-        $ipQps = (int) ($ipConfig['ip_qps'] ?? 0);
-        if ($ipQps > 0) {
-            $bucket = $this->handler->build('limiter:ip:' . $ip, $ipQps, $ipQps, 0);
-            if (!$bucket->consume(1)) {
-                return $this->tooMany();
-            }
-        }
-
-        // 4) 路由 QPS —— 令牌桶,含 overrides, 0 则跳过
-        $overrides  = (array) ($routeConfig['overrides'] ?? []);
-        $defaultQps = (int) ($routeConfig['default_qps'] ?? 0);
-        $routeQps   = array_key_exists($path, $overrides) ? (int) $overrides[$path] : $defaultQps;
-        if ($routeQps > 0) {
-            $bucket = $this->handler->build('limiter:route:' . $path . ':' . $ip, $routeQps, $routeQps, 0);
-            if (!$bucket->consume(1)) {
+        $buckets = Limiter::buckets($globalConfig, $ipConfig, $routeConfig, $ip, $path);
+        foreach ($buckets as $spec) {
+            $bucket = $this->handler->build($spec['key'], $spec['qps'], $spec['qps'], 0);
+            $passed = $bucket->consume(1);
+            if (!$passed) {
                 return $this->tooMany();
             }
         }
@@ -60,28 +53,10 @@ final class RateLimit implements MiddlewareInterface
         return $handler->handle($request);
     }
 
-    private function ipInWhitelist(string $ip, array $ipConfig): bool
-    {
-        $whitelist = (array) ($ipConfig['ip_whitelist'] ?? []);
-        foreach ($whitelist as $cidr) {
-            if (Cidr::contains((string) $cidr, $ip)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private function clientIp(ServerRequestInterface $request): string
-    {
-        $params = $request->getServerParams();
-        return (string) (
-            $params['remote_addr']
-            ?? $params['x-real-ip']
-            ?? $params['x-forwarded-for']
-            ?? '127.0.0.1'
-        );
-    }
-
+    /**
+     * 限流命中响应 429
+     * @return ResponseInterface
+     */
     private function tooMany(): ResponseInterface
     {
         return (new Response())->withStatus(429)->json([

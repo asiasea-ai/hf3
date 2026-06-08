@@ -47,6 +47,10 @@ enum Code: int implements CodeInterface
     case MODEL_FIND_ONE_FIELD_NULL = -3505;
     case MODEL_SAVE_FIELD_NULL = -3506;
 
+    case MODEL_SUBJECT_AMBIGUOUS     = -3507;
+    case MODEL_SUBJECT_MISSING       = -3508;
+    case MODEL_SUBJECT_SQL_UNGUARDED = -3509;
+
     case ADAPTER_FIELD_MISSING       = -3601;
 
     case COROUTINE_TIMEOUT           = -3701;
@@ -88,6 +92,9 @@ enum Code: int implements CodeInterface
             Code::MODEL_SAVE_FIELD_NULL        => '未找到新增的字段',
             Code::MODEL_FIND_MULTI_ROWS     => '单行接口命中多行,数据完整性问题',
             Code::MODEL_DELETE_FLG_AMBIGUOUS => 'FIELDS 同时命中多个软删候选列,schema 错配',
+            Code::MODEL_SUBJECT_AMBIGUOUS   => '表同时命中多个主体隔离列,schema 错配',
+            Code::MODEL_SUBJECT_MISSING     => '受管表操作缺少主体上下文,跨主体/系统操作请用 Subject::without 显式放行',
+            Code::MODEL_SUBJECT_SQL_UNGUARDED => '裸 SQL 操作受管表但 SQL 未带主体列,数据隔离风险',
             Code::ADAPTER_FIELD_MISSING     => 'Adapter 源 VO 缺字段且目标构造器无 default',
             Code::COROUTINE_TIMEOUT         => 'waitGroup 超时',
             Code::SIGN_KEY_MISSING          => 'SIGN_RSA_PUBLIC 未配置',
