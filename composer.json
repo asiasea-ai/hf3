@@ -1,9 +1,14 @@
 {
     "name": "asiasea-ai/hf3",
-    "description": "TODO: 一句话描述这个 PHP 库的用途",
+    "description": "基于 Hyperf 3.2 / Swoole 协程的微服务基础库:Controller→Gateway→Service→Dao→Model 分层基类、JWT 鉴权、限流、统一异常体系、表结构内省与 OpenAPI 文档生成。",
     "type": "library",
     "keywords": [
-        "php"
+        "php",
+        "hyperf",
+        "swoole",
+        "coroutine",
+        "microservice",
+        "framework"
     ],
     "homepage": "https://github.com/asiasea-ai/hf3",
     "license": "MIT",
