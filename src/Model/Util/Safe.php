@@ -119,10 +119,10 @@ final class Safe
      *   - 多表(join):每张受管表必须出现限定写法 别名.company_id(或 表名.company_id),漏一张即抛.
      * 隔离总开关关闭 / 表非受管 → 放行.
      * @param string $sql 待入库 SQL
-     * @param string $connection 连接池名(逐表查 Schema 用),默认 main
+     * @param string $connection 连接池名(逐表查 Schema 用),调用方从 model::CONNECTION 传入
      * @return void
      */
-    public static function company(string $sql, string $connection = 'main'): void
+    public static function company(string $sql, string $connection): void
     {
         $tables = Sql::tables($sql);
         $multiTable = count($tables) > 1;

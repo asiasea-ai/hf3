@@ -40,14 +40,15 @@ class Field
     }
 
     /**
-     * 获取可查询字段白名单 —— 走 Schema::inspect 取 Model::NAME 对应表的列名 list
+     * 获取可查询字段白名单 —— 走 Schema::inspect 取 Model::NAME 对应表的列名 list,连接跟随 Model::CONNECTION
      * @param class-string $modelClass
      * @return list<string>
      */
     public static function select(string $modelClass): array
     {
         $table = (string) constant("{$modelClass}::NAME");
-        $fields = Schema::inspect($table);
+        $connection = (string) constant("{$modelClass}::CONNECTION");
+        $fields = Schema::inspect($table, $connection);
         return array_keys($fields);
     }
 

@@ -24,6 +24,18 @@ final class Inspect
     }
 
     /**
+     * 由 Listing 拼装工具类 FQCN 反推其对应的 Model FQCN —— listingUtilClass 的逆变换
+     *
+     * @param class-string<Listing> $listingClass
+     * @return class-string<BaseModel>
+     */
+    public static function modelClass(string $listingClass): string
+    {
+        $prefix = (string) preg_replace('/\\\\Dao\\\\Listing$/', '', $listingClass);
+        return str_replace('\\Util\\', '\\Model\\', $prefix);
+    }
+
+    /**
      * 拼接 SELECT 列表 —— 走 Schema 取列名,过滤 delete_time / 软删标记列,反引号包裹拼接
      *
      * Schema 不可读(表不存在 / 无 SELECT 权限)时 $allCols=[],

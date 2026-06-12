@@ -6,40 +6,12 @@ namespace Hf3\Dao;
 
 use Hf3\Dao\Util\Inspect;
 use Hf3\Model\BaseModel;
-use Hf3\Model\Util\Field;
-use Hf3\Model\Util\Company;
-use Hf3\Throwable\Exception\ErrorException;
 
 abstract class BaseDao
 {
     public function __construct(
         protected readonly BaseModel $model,
     ) {
-    }
-
-    /**
-     * 列表查询的强制 WHERE 等值条件 —— Dao 持有 model,据此算出必带的过滤:
-     *   - 软删列 delete_flg = 0(只查未删行)
-     *   - 公司列 company_id = 当前公司(SaaS 隔离,受管表 fail-closed,无上下文抛错)
-     * 返回 [列名 => 值] map,交给 Listing::where 逐条 $qb->where 注入.
-     * @return array<string, mixed>
-     */
-    protected function forcedConditions(): array
-    {
-        $columns = Field::select($this->model::class);
-        $forced  = [];
-
-        $deleteField = Field::deleteFlg($columns);
-        if ($deleteField !== '') {
-            $forced[$deleteField] = 0;
-        }
-
-        [$companyColumn, $companyId] = Company::filter($columns);
-        if ($companyColumn !== '') {
-            $forced[$companyColumn] = $companyId;
-        }
-
-        return $forced;
     }
 
     /**
@@ -55,10 +27,9 @@ abstract class BaseDao
         $mode   = $params['page_mode'];
         $cursor = $params['page_cursor'] ?? null;
 
-        $connection = $this->model::CONNECTION;
         $util = Inspect::listingUtilClass($this->model);
-        ['where' => $where, 'bind' => $bind] = $util::where($params, $mode, $cursor, $this->forcedConditions(), $connection);
-        $order = $util::orderBy($mode, $connection);
+        ['where' => $where, 'bind' => $bind] = $util::where($params, $mode, $cursor);
+        $order = $util::orderBy($mode);
 
         $cols = Inspect::selectField($this->model);
         /** LIMIT 走整型内联(非参数绑定)—— SelectDB/Doris 不支持 `LIMIT ?` 占位,emulate 模式下会拼成 `LIMIT '51'` 触发语法错误 */
@@ -86,7 +57,7 @@ abstract class BaseDao
     {
         $table = $this->model::tableName();
         $util  = Inspect::listingUtilClass($this->model);
-        ['where' => $where, 'bind' => $bind] = $util::where($params, null, null, $this->forcedConditions(), $this->model::CONNECTION);
+        ['where' => $where, 'bind' => $bind] = $util::where($params);
 
         $sql = "SELECT COUNT(*) AS `count` FROM `{$table}` {$where}";
         $row = $this->model->row($sql, $bind);

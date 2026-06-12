@@ -22,10 +22,10 @@ final class Schema
      * 内省单表结构 —— 物理表名映射成 ['col' => ['name', 'type']] 字典
      *
      * @param string $table
-     * @param string $connection
+     * @param string $connection 连接池名(调用方从 model::CONNECTION 传入)
      * @return array<string, array{name: string, type: string}>
      */
-    public static function inspect(string $table, string $connection = 'main'): array
+    public static function inspect(string $table, string $connection): array
     {
         $key = "{$connection}_{$table}";
         if (!isset(Schema::$cache[$key])) {

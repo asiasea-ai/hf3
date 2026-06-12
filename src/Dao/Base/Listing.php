@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Hf3\Dao\Base;
 
+use Hf3\Dao\Util\Forced;
+use Hf3\Dao\Util\Inspect;
 use Hf3\Dao\Util\Page;
 use Hf3\Throwable\Exception\ErrorException;
 use Hf3\Throwable\Exception\WarnException;
@@ -25,15 +27,28 @@ abstract class Listing
     protected const array LIKE = [];
 
     /**
+     * 本 Listing 对应的连接池名 —— 由自身 FQCN 反推 Model FQCN,读其 CONNECTION 常量
+     *
+     * 连接唯一声明在 Model::CONNECTION,这里自动推导,调用方无需透传.
+     * @return string
+     */
+    public static function connection(): string
+    {
+        $modelClass = Inspect::modelClass(static::class);
+        return (string) constant("{$modelClass}::CONNECTION");
+    }
+
+    /**
      * 起一个空 QB —— 借用匿名表名 '_' 只为拿到 wheres 累计槽 + grammar,
      * 实际 SQL 由调用方(BaseDao listing 的 raw SELECT 模板)拼接.
      *
-     * $connection 由 BaseDao 从持有的 model::CONNECTION 传入,保证拼装方言与执行库一致;
+     * 连接走 connection() 自动推导,保证拼装方言与执行库一致;
      * 子类需要预挂 JOIN,override 这里即可.
-     * @param string $connection 连接池名
+     * @return Builder
      */
-    protected static function qb(string $connection): Builder
+    protected static function qb(): Builder
     {
+        $connection = static::connection();
         return Db::connection($connection)->table('_');
     }
 
@@ -46,13 +61,11 @@ abstract class Listing
      * @param array<string, mixed> $params  过滤条件 bag(keyword / IN / LIKE / time_field 等)
      * @param string|null          $pageMode    'first' / 'next' / 'prev' / 'last';null 时跳过 cursor 块
      * @param string|null          $pageCursor  cursor token(DTO 层已校验,只有 next/prev 才非空)
-     * @param array<string, mixed> $forced 强制等值条件(由 BaseDao 注入:软删 delete_flg=0 + 租户 company_id=当前)
-     * @param string               $connection  连接池名(由 BaseDao 从 model::CONNECTION 传入),决定拼装方言
      * @return array{where: string, bind: list<mixed>}
      */
-    public static function where(array $params, ?string $pageMode = null, ?string $pageCursor = null, array $forced = [], string $connection = 'main'): array
+    public static function where(array $params, ?string $pageMode = null, ?string $pageCursor = null): array
     {
-        $qb = static::qb($connection);
+        $qb = static::qb();
 
         /** keyword 多列 OR LIKE */
         $keyword = $params['keyword'] ?? null;
@@ -84,7 +97,9 @@ abstract class Listing
             $qb->where($column, 'like', '%' . $value . '%');
         }
 
-        /** 强制等值条件 —— BaseDao 注入:软删 delete_flg=0 + 租户 company_id=当前,受管表必带 */
+        /** 强制等值条件 —— 软删 delete_flg=0 + 租户 company_id=当前,由 Model FQCN 推导,受管表必带 */
+        $modelClass = Inspect::modelClass(static::class);
+        $forced = Forced::conditions($modelClass);
         foreach ($forced as $forcedColumn => $forcedValue) {
             $qb->where($forcedColumn, $forcedValue);
         }
@@ -130,13 +145,12 @@ abstract class Listing
      * count 路径不调本方法.
      *
      * @param string $pageMode 'first' / 'next' / 'prev' / 'last'
-     * @param string $connection 连接池名(由 BaseDao 从 model::CONNECTION 传入),决定拼装方言
      * @return string  形如 "order by `create_time` desc, `id` desc"
      */
-    public static function orderBy(string $pageMode, string $connection = 'main'): string
+    public static function orderBy(string $pageMode): string
     {
         $direction = in_array($pageMode, ['last', 'prev'], true) ? 'asc' : 'desc';
-        $qb = static::qb($connection)
+        $qb = static::qb()
             ->orderBy('create_time', $direction)
             ->orderBy('id', $direction);
         return (string) stristr($qb->toSql(), 'order by ');
