@@ -4,11 +4,9 @@ declare(strict_types=1);
 
 namespace Hf3\Dao\Base;
 
-use Hf3\Dao\Util\Forced;
-use Hf3\Dao\Util\Inspect;
+use Hf3\Auto\Query;
+use Hf3\Dao\Util\Converter;
 use Hf3\Dao\Util\Page;
-use Hf3\Throwable\Exception\ErrorException;
-use Hf3\Throwable\Exception\WarnException;
 use Hyperf\Database\Query\Builder;
 use Hyperf\DbConnection\Db;
 
@@ -27,28 +25,17 @@ abstract class Listing
     protected const array LIKE = [];
 
     /**
-     * 本 Listing 对应的连接池名 —— 由自身 FQCN 反推 Model FQCN,读其 CONNECTION 常量
-     *
-     * 连接唯一声明在 Model::CONNECTION,这里自动推导,调用方无需透传.
-     * @return string
-     */
-    public static function connection(): string
-    {
-        $modelClass = Inspect::modelClass(static::class);
-        return (string) constant("{$modelClass}::CONNECTION");
-    }
-
-    /**
      * 起一个空 QB —— 借用匿名表名 '_' 只为拿到 wheres 累计槽 + grammar,
      * 实际 SQL 由调用方(BaseDao listing 的 raw SELECT 模板)拼接.
      *
-     * 连接走 connection() 自动推导,保证拼装方言与执行库一致;
+     * 连接由自身 FQCN 反推 Model 读其 CONNECTION,保证拼装方言与执行库一致;
      * 子类需要预挂 JOIN,override 这里即可.
      * @return Builder
      */
     protected static function qb(): Builder
     {
-        $connection = static::connection();
+        $model = Converter::listingToModel(static::class);
+        $connection= (string) constant("{$model}::CONNECTION");
         return Db::connection($connection)->table('_');
     }
 
@@ -59,12 +46,14 @@ abstract class Listing
      * listing 路径 调 where($params, $mode, $cursor) → filter + cursor
      *
      * @param array<string, mixed> $params  过滤条件 bag(keyword / IN / LIKE / time_field 等)
-     * @param string|null          $pageMode    'first' / 'next' / 'prev' / 'last';null 时跳过 cursor 块
-     * @param string|null          $pageCursor  cursor token(DTO 层已校验,只有 next/prev 才非空)
+     * @param string|null          $mode    'first' / 'next' / 'prev' / 'last';null 时跳过 cursor 块
+     * @param string|null          $cursor  cursor token(DTO 层已校验,只有 next/prev 才非空)
      * @return array{where: string, bind: list<mixed>}
      */
-    public static function where(array $params, ?string $pageMode = null, ?string $pageCursor = null): array
+    public static function where(array $params, ?string $mode = null, ?string $cursor = null): array
     {
+        /** util 转 model */
+        $model = Converter::listingToModel(static::class);
         $qb = static::qb();
 
         /** keyword 多列 OR LIKE */
@@ -97,11 +86,10 @@ abstract class Listing
             $qb->where($column, 'like', '%' . $value . '%');
         }
 
-        /** 强制等值条件 —— 软删 delete_flg=0 + 租户 company_id=当前,由 Model FQCN 推导,受管表必带 */
-        $modelClass = Inspect::modelClass(static::class);
-        $forced = Forced::conditions($modelClass);
-        foreach ($forced as $forcedColumn => $forcedValue) {
-            $qb->where($forcedColumn, $forcedValue);
+        /** 自动注入 */
+        $autoList = Query::all($model);
+        foreach ($autoList as $key => $value) {
+            $qb->where($key, $value);
         }
 
         /** 时间区间过滤 —— time_field 不传跳过;粒度按字符串长度自适应 */
@@ -117,9 +105,9 @@ abstract class Listing
          *  排序键固定 (create_time, id);如需别的排序键再加 CURSOR_COLUMNS 常量
          *  DTO 已校验 cursor 内容合法(含 create_time/id),Dao 信任
          *  目标 SQL: (create_time op X) OR (create_time = X AND id op Y) */
-        if ($pageMode !== null && !empty($pageCursor)) {
-            $cursor     = Page::decode($pageCursor);
-            $op         = $pageMode === 'prev' ? '>' : '<';
+        if ($mode !== null && !empty($cursor)) {
+            $cursor     = Page::decode($cursor);
+            $op         = $mode === 'prev' ? '>' : '<';
             $createTime = $cursor['create_time'];
             $id         = $cursor['id'];
 

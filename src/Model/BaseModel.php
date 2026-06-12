@@ -4,14 +4,18 @@ declare(strict_types=1);
 
 namespace Hf3\Model;
 
+use Hf3\Auto\Delete;
+use Hf3\Auto\Save as AutoSave;
 use Hf3\Code\Code;
 use Hf3\Db\Schema;
 use Hf3\Model\Util\Adapter;
 use Hf3\Model\Util\Auto;
 use Hf3\Model\Util\Field;
 use Hf3\Model\Util\Save;
-use Hf3\Model\Util\Company;
 use Hf3\Model\Util\Table;
+use Hf3\Safe\Bind;
+use Hf3\Safe\Company;
+use Hf3\Safe\Inject;
 use Hf3\Throwable\Exception\ErrorException;
 use Hf3\Throwable\Exception\WarnException;
 use Hyperf\Database\Connection;
@@ -21,8 +25,6 @@ abstract class BaseModel
 {
     /** 数据库连接池名 —— 子类按需重写为别的库(如 const CONNECTION = 'report';),Listing 会自动跟随 */
     public const string CONNECTION = 'main';
-
-    public const string TYPE = 'NORMAL';
 
     public const string PK = 'id';
 
@@ -34,6 +36,18 @@ abstract class BaseModel
     public static function tableName(): string
     {
         return Table::get(static::class);
+    }
+
+    /**
+     * 获取本表列名 list —— 走 Schema::info 取 NAME 对应表的列,连接跟随 CONNECTION
+     *
+     * schema 不可读(表不存在 / 动态分表无基表)时返空 list.
+     * @return list<string>
+     */
+    public static function fieldList(): array
+    {
+        $fields = Schema::info(static::class);
+        return array_keys($fields);
     }
 
     /**
@@ -54,7 +68,8 @@ abstract class BaseModel
      */
     public static function fieldName(string $key): string
     {
-        $name = Schema::inspect(static::NAME, static::CONNECTION)[$key]['name'] ?? null;
+        $fields = Schema::info(static::class);
+        $name = $fields[$key]['name'] ?? null;
         if (superEmpty($name)) {
             throw new ErrorException(Code::FIELD_NOT_FOUND);
         }
@@ -62,12 +77,12 @@ abstract class BaseModel
     }
 
     /**
-     * 获取本表 schema 字典 —— 走 Schema::inspect 懒查 + 进程内 static cache,二次访问 0 IO
+     * 获取本表 schema 字典 —— 走 Schema::info 懒查 + 进程内 static cache,二次访问 0 IO
      * @return array<string, array{name: string, type: string}>
      */
-    public function schemaInfo(): array
+    public static function schemaInfo(): array
     {
-        return Schema::inspect(static::NAME, static::CONNECTION);
+        return Schema::info(static::class);
     }
 
     /**
@@ -80,20 +95,22 @@ abstract class BaseModel
     final public function delete(array $where, ?int $limit = null): int
     {
         /** 清理删除条件 */
-        $columns = Field::select(static::class);
-        $where = Field::clean($columns, $where);
-
-        /** 受管表强制注入当前公司过滤 */
-        $where = Company::enforce($columns, $where);
+        $columns = static::fieldList();
+        $where = Field::clean(static::class, $where);
 
         /** 删除条件或表字段不能为空 */
         if ($where === [] || $columns === []) {
             throw new ErrorException(Code::MODEL_DELETE_FIELD_NULL);
         }
 
-        /** 动态获取表名及逻辑删除列 */
+        /** 受管表强制:WHERE 限定当前公司(覆盖外部传入),防止越权删他人公司 */
+        $companyField = Field::companyId(static::class);
+        if (!superEmpty($companyField)) {
+            $where[$companyField] = companyId();
+        }
+
+        /** 动态获取表名 */
         $tableName = static::tableName();
-        $deleteField = Field::deleteFlg($columns);
 
         /** 拼接删除条件 */
         $qb = Db::connection(static::CONNECTION)->table($tableName);
@@ -106,14 +123,15 @@ abstract class BaseModel
             $qb->limit($limit);
         }
 
-        /** sql 注入检测 + 公司隔离检测 */
-        Util\Safe::inject($qb->toSql());
-        Util\Safe::company($qb->toSql(), static::CONNECTION);
+        /** sql 检测 —— 软删/物理删共用,先检后删 */
+        $sql = $qb->toSql();
+        Bind::check($sql);
+        Inject::check($sql);
+        Company::check($sql, static::class);
 
-        /** 软删除 */
-        if (!superEmpty($deleteField)) {
-            $fields = $this->schemaInfo();
-            $patch = [$deleteField => 1] + Auto::time($fields, 'delete_time') + Auto::accountId($fields, 'delete');
+        /** 软删 patch —— 空 map 即非软删表,走物理删除 */
+        $patch = Delete::all(static::class);
+        if ($patch !== []) {
             return $qb->update($patch);
         }
 
@@ -131,19 +149,18 @@ abstract class BaseModel
     final public function listing(string $sql, array $params = []): array
     {
         /** SQL 绑定参数检测 */
-        Util\Safe::bind($sql);
+        Bind::check($sql);
         /** SQL 注入检测 */
-        Util\Safe::inject($sql);
-
+        Inject::check($sql);
         /** 公司隔离检测:SQL 涉及的每张受管表都必须按公司列过滤 */
-        Util\Safe::company($sql, static::CONNECTION);
+        Company::check($sql, static::class);
 
         /** 获取查询结果 */
         $rows = Db::connection(static::CONNECTION)->select($sql, $params);
         $rows = array_map(static fn(object $r): array => (array)$r, $rows);
 
         /** 数据转换*/
-        $fields = $this->schemaInfo();
+        $fields = static::schemaInfo();
         return array_map(static fn(array $row): array => Adapter::castRow($fields, $row), $rows);
     }
 
@@ -156,18 +173,21 @@ abstract class BaseModel
      */
     final public function row(string $sql, array $params = []): ?array
     {
-        Util\Safe::bind($sql);
-        Util\Safe::inject($sql);
-
+        /** SQL 绑定参数检测 */
+        Bind::check($sql);
+        /** SQL 注入检测 */
+        Inject::check($sql);
         /** 公司隔离检测:SQL 涉及的每张受管表都必须按公司列过滤 */
-        Util\Safe::company($sql, static::CONNECTION);
+        Company::check($sql, static::class);
 
+        /** 获取查询结果 */
         $rows = Db::connection(static::CONNECTION)->select($sql, $params);
         if ($rows === []) {
             return null;
         }
 
-        $fields = $this->schemaInfo();
+        /** 数据转换*/
+        $fields = static::schemaInfo();
         $row = (array)$rows[0];
         return Adapter::castRow($fields, $row);
     }
@@ -181,11 +201,12 @@ abstract class BaseModel
      */
     final public function exec(string $sql, array $params = []): int
     {
-        Util\Safe::bind($sql);
-        Util\Safe::inject($sql);
-
+        /** SQL 绑定参数检测 */
+        Bind::check($sql);
+        /** SQL 注入检测 */
+        Inject::check($sql);
         /** 公司隔离检测:SQL 涉及的每张受管表都必须按公司列过滤 */
-        Util\Safe::company($sql, static::CONNECTION);
+        Company::check($sql, static::class);
 
         return Db::connection(static::CONNECTION)->affectingStatement($sql, $params);
     }
@@ -200,13 +221,8 @@ abstract class BaseModel
      */
     final public function update(array $data = [], array $where = [], ?int $numRows = null): int
     {
-        $columns = Field::select(static::class);
-        $data = Field::clean($columns, $data);
-        $where = Field::clean($columns, $where);
-
-        /** 受管表:WHERE 强制带公司,data 剥离公司列(禁止经 update 改公司归属) */
-        $where = Company::enforce($columns, $where);
-        $data = Company::strip($columns, $data);
+        $data = Field::clean(static::class, $data);
+        $where = Field::clean(static::class, $where);
 
         if ($data === [] || $where === []) {
             return 0;
@@ -220,11 +236,22 @@ abstract class BaseModel
             );
         }
 
-        $columns = Field::select(static::class);
-        $table = static::NAME;
+        /** 受管表强制:WHERE 限定当前公司(覆盖外部传入),data 剥离公司列(禁止经 update 改公司归属) */
+        $companyField = Field::companyId(static::class);
+        if (!superEmpty($companyField)) {
+            $where[$companyField] = companyId();
+            unset($data[$companyField]);
+        }
 
-        $data += Auto::time($columns, 'update_time');
-        $data += Auto::accountId($columns, 'update');
+        /** data 仅含公司列时剥离后为空,无可更新字段 */
+        if ($data === []) {
+            return 0;
+        }
+
+        $table = static::tableName();
+
+        $data += Auto::time(static::class, 'update_time');
+        $data += Auto::accountId(static::class, 'update');
 
         $qb = Db::connection(static::CONNECTION)->table($table);
         foreach ($where as $key => $value) {
@@ -235,8 +262,13 @@ abstract class BaseModel
             $qb->limit($numRows);
         }
 
-        Util\Safe::inject($qb->toSql());
-        Util\Safe::company($qb->toSql(), static::CONNECTION);
+        $sql = $qb->toSql();
+        /** SQL 绑定参数检测 */
+        Bind::check($sql);
+        /** SQL 注入检测 */
+        Inject::check($sql);
+        /** 公司隔离检测:SQL 涉及的每张受管表都必须按公司列过滤 */
+        Company::check($sql, static::class);
 
         return $qb->update($data);
     }
@@ -249,28 +281,32 @@ abstract class BaseModel
     final public function save(array $data): int
     {
         /** 清理无关字段 */
-        $columns = Field::select(static::class);
-        $data = Field::clean($columns, $data);
-
-        /** 受管表强制注入当前公司 */
-        $data = Company::enforce($columns, $data);
+        $data = Field::clean(static::class, $data);
 
         if ($data === []) {
             throw new ErrorException(Code::MODEL_SAVE_FIELD_NULL);
         }
 
+        /** 受管表强制写入当前公司 —— 覆盖外部传入值,防止越权写他人公司 */
+        $companyField = Field::companyId(static::class);
+        if (!superEmpty($companyField)) {
+            $data[$companyField] = companyId();
+        }
+
         /** 自动注入 create_* 审计字段(INSERT 不写 update */
-        $data += Auto::time($columns, 'create_time');
-        $data += Auto::accountId($columns, 'create');
+        $data += Auto::time(static::class, 'create_time');
+        $data += Auto::accountId(static::class, 'create');
 
         /** 生成保存 SQL */
         $table = static::tableName();
         ['bind' => $bind, 'sql' => $sql] = Save::all($table, [$data]);
 
-        /** 参数绑定检测 注入检测 公司隔离检测 */
-        Util\Safe::bind($sql);
-        Util\Safe::inject($sql);
-        Util\Safe::company($sql, static::CONNECTION);
+        /** SQL 绑定参数检测 */
+        Bind::check($sql);
+        /** SQL 注入检测 */
+        Inject::check($sql);
+        /** 公司隔离检测:SQL 涉及的每张受管表都必须按公司列过滤 */
+        Company::check($sql, static::class);
 
         /** @var Connection $conn */
         $conn = Db::connection(static::CONNECTION);
@@ -291,37 +327,18 @@ abstract class BaseModel
             return 0;
         }
 
-        $columns = Field::select(static::class);
-        /** Field::clean 过滤非表列;array_diff_key 再剔掉框架管控的审计字段(外部传入丢弃) */
-        $managedFlip = array_flip(Auto::managed());
-        $dataList = array_map(
-            static function (array $row) use ($columns, $managedFlip): array {
-                $cleaned = Field::clean($columns, $row);
-                return array_diff_key($cleaned, $managedFlip);
-            },
-            $dataList,
-        );
+        /** 行预处理 —— 消毒 + 受管表强制公司 + 补审计字段 */
+        $dataList = AutoSave::all(static::class, $dataList);
 
-        /** 受管表逐行强制注入当前公司 */
-        $dataList = array_map(
-            static fn(array $row): array => Company::enforce($columns, $row),
-            $dataList,
-        );
-
-        /** 整批共用一个时间戳 + 同一用户 */
-        $time = Auto::time($columns, 'create_time');
-        $account = Auto::accountId($columns, 'create');
-        $dataList = array_map(
-            static fn(array $row): array => $row + $time + $account,
-            $dataList,
-        );
-
-        $table = static::NAME;
+        $table = static::tableName();
         ['bind' => $bind, 'sql' => $sql] = Save::all($table, $dataList);
 
-        Util\Safe::bind($sql);
-        Util\Safe::inject($sql);
-        Util\Safe::company($sql, static::CONNECTION);
+        /** SQL 绑定参数检测 */
+        Bind::check($sql);
+        /** SQL 注入检测 */
+        Inject::check($sql);
+        /** 公司隔离检测:SQL 涉及的每张受管表都必须按公司列过滤 */
+        Company::check($sql, static::class);
 
         return Db::connection(static::CONNECTION)->affectingStatement($sql, $bind);
     }
@@ -340,11 +357,8 @@ abstract class BaseModel
     final public function find(array $where = [], array $fields = []): ?array
     {
         /** 清理无关字段 */
-        $columns = Field::select(static::class);
-        $where = Field::clean($columns, $where);
-
-        /** 受管表强制注入当前公司过滤 */
-        $where = Company::enforce($columns, $where);
+        $columns = static::fieldList();
+        $where = Field::clean(static::class, $where);
 
         if ($where === [] || $columns === []) {
             throw new ErrorException(Code::MODEL_FIND_ONE_FIELD_NULL);
@@ -352,9 +366,15 @@ abstract class BaseModel
 
         /** 获取逻辑删除 */
         $tableName = static::tableName();
-        $deleteField = Field::deleteFlg($columns);
+        $deleteField = Field::deleteFlg(static::class);
         if (!superEmpty($deleteField)) {
             $where[$deleteField] ??= 0;
+        }
+
+        /** 受管表强制:WHERE 限定当前公司(覆盖外部传入),防止越权查他人公司 */
+        $companyField = Field::companyId(static::class);
+        if (!superEmpty($companyField)) {
+            $where[$companyField] = companyId();
         }
 
         /** 没传查什么字段就给默认 */
@@ -373,7 +393,7 @@ abstract class BaseModel
         }
 
         /** 公司隔离检测 —— 受管表必须按公司列过滤 */
-        Util\Safe::company($qb->toSql(), static::CONNECTION);
+        Company::check($qb->toSql(), static::class);
 
         /** 查询结果 */
         $rows = $qb->get()->toArray();

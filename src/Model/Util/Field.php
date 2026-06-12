@@ -4,63 +4,73 @@ declare(strict_types=1);
 
 namespace Hf3\Model\Util;
 
-use Hf3\Code\Code;
-use Hf3\Db\Schema;
-use Hf3\Throwable\Exception\ErrorException;
-use Hf3\Throwable\Exception\WarnException;
-
 class Field
 {
     /**
-     * 获取软删标记列 —— 在"列名 list"中匹配 etc 配置的候选,0 个返空、1 个返列名、>1 抛错(schema 错配)
+     * 获取软删标记列 —— 由 Model FQCN 取表列名 list,表实际含 etc 配置的软删列时返列名,否则返空串
      *
-     * 入参语义跟 Field::select() / Field::clean() 对齐 —— 都是 **list of 列名**,不是 FIELDS map.
-     * 若调用方手里是 FIELDS map,先 array_keys() 再传进来.
-     * @param list<string> $columns 列名 list(常通过 Field::select(static::class) 取得)
+     * 列名走 $model::fieldList() 取得,连接跟随 Model::CONNECTION;
+     * 未配置软删列 / 表不含该列 / schema 不可读(表不存在 / 动态分表无基表),均返空串.
+     * @param class-string $model Model FQCN
      * @return string
      */
-    public static function deleteFlg(array $columns): string
+    public static function deleteFlg(string $model): string
     {
-        $candidates = etc('auto.delete.delete_flg');
-        if (!is_array($candidates)) {
+        /** 配置的软删列名 */
+        $field = (string) (etc('auto.delete.delete_flg') ?? '');
+        if (superEmpty($field)) {
             return '';
         }
 
-        $matched = array_intersect($candidates, $columns);
-
-        if (count($matched) > 1) {
-            throw new WarnException(
-                code: Code::MODEL_DELETE_FLG_AMBIGUOUS,
-                message: 'FIELDS 同时命中多个软删候选列 [' . implode(', ', $matched) . '] —— schema 错配,请只保留一个',
-                category: 'audit/delete-flg',
-            );
+        /** 表实际含该列才走软删 */
+        $columns = $model::fieldList();
+        if (!in_array($field, $columns, true)) {
+            return '';
         }
 
-        return (string) current($matched);
+        return $field;
     }
 
     /**
-     * 获取可查询字段白名单 —— 走 Schema::inspect 取 Model::NAME 对应表的列名 list,连接跟随 Model::CONNECTION
-     * @param class-string $modelClass
-     * @return list<string>
-     */
-    public static function select(string $modelClass): array
-    {
-        $table = (string) constant("{$modelClass}::NAME");
-        $connection = (string) constant("{$modelClass}::CONNECTION");
-        $fields = Schema::inspect($table, $connection);
-        return array_keys($fields);
-    }
-
-    /**
-     * 按白名单过滤数组
-     * @param array $allowed
+     * 按本表列名白名单过滤数组 —— 由 Model FQCN 取列名 list,剔除非表列的键
+     * @param class-string $model Model FQCN
      * @param array $input
      * @return array
      */
-    public static function clean(array $allowed, array $input): array
+    public static function clean(string $model, array $input): array
     {
+        $allowed = $model::fieldList();
         return array_intersect_key($input, array_flip($allowed));
     }
 
+    /**
+     * 获取公司隔离列 —— 由 Model FQCN 取表列名 list,开关开启且表实际含 etc 配置的公司列时返列名,否则返空串
+     *
+     * 列名走 $model::fieldList() 取得,连接跟随 Model::CONNECTION;
+     * 开关关闭 / 未配置公司列 / 表不含该列(非受管表) / schema 不可读,均返空串.
+     * @param class-string $model Model FQCN
+     * @return string
+     */
+    public static function companyId(string $model): string
+    {
+        /** 总开关 */
+        $enable = (bool) etc('auto.company.enable', true);
+        if (superEmpty($enable)) {
+            return '';
+        }
+
+        /** 配置的公司列名 */
+        $field = (string) (etc('auto.company.field') ?? '');
+        if (superEmpty($field)) {
+            return '';
+        }
+
+        /** 表实际含该列才算受管表 */
+        $columns = $model::fieldList();
+        if (!in_array($field, $columns, true)) {
+            return '';
+        }
+
+        return $field;
+    }
 }

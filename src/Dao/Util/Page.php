@@ -70,7 +70,7 @@ final class Page
      * @param callable(array<string, mixed>): string $encoder 把行编码成 cursor token 的闭包(通常用 fn => Page::encode([...]))
      * @return array{0: ?string, 1: ?string} [prevCursor, nextCursor]
      */
-    public static function cursors(string $mode, array $rows, bool $nextPage, callable $encoder): array
+    public static function cursor(string $mode, array $rows, bool $nextPage, callable $encoder): array
     {
         if ($rows === []) {
             return [null, null];

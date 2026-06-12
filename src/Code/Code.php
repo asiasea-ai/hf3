@@ -95,7 +95,7 @@ enum Code: int implements CodeInterface
             Code::MODEL_FIND_MULTI_ROWS     => '单行接口命中多行,数据完整性问题',
             Code::MODEL_DELETE_FLG_AMBIGUOUS => 'FIELDS 同时命中多个软删候选列,schema 错配',
             Code::MODEL_COMPANY_AMBIGUOUS   => '表同时命中多个公司隔离列,schema 错配',
-            Code::MODEL_COMPANY_MISSING     => '受管表操作缺少公司上下文,跨公司/系统操作请用 Company::without 显式放行',
+            Code::MODEL_COMPANY_MISSING     => '受管表操作缺少公司上下文',
             Code::MODEL_COMPANY_SQL_UNGUARDED => '裸 SQL 操作受管表但 SQL 未带公司列,数据隔离风险',
             Code::ADAPTER_FIELD_MISSING     => 'Adapter 源 VO 缺字段且目标构造器无 default',
             Code::COROUTINE_TIMEOUT         => 'waitGroup 超时',

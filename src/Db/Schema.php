@@ -19,39 +19,36 @@ final class Schema
     private static array $cache = [];
 
     /**
-     * 内省单表结构 —— 物理表名映射成 ['col' => ['name', 'type']] 字典
+     * 内省单表结构 —— 由 Model FQCN 算连接与表名,映射成 ['col' => ['name', 'type']] 字典
      *
-     * @param string $table
-     * @param string $connection 连接池名(调用方从 model::CONNECTION 传入)
+     * 连接由 Model::CONNECTION、表名由 Model::NAME 常量自动推导,调用方只传 Model FQCN.
+     * 缓存未命中时走 SHOW FULL COLUMNS 拉 schema;失败/不存在/非法表名占位空字典(避免穿透 DB).
+     * @param class-string $model Model FQCN
      * @return array<string, array{name: string, type: string}>
      */
-    public static function inspect(string $table, string $connection): array
+    public static function info(string $model): array
     {
-        $key = "{$connection}_{$table}";
-        if (!isset(Schema::$cache[$key])) {
-            Schema::loadOne($table, $connection, $key);
-        }
-        return Schema::$cache[$key];
-    }
+        $connection = (string) constant("{$model}::CONNECTION");
+        $table = (string) constant("{$model}::NAME");
 
-    /**
-     * 单表 SHOW FULL COLUMNS 拉 schema —— 失败/不存在/非法表名 占位空字典(避免穿透 DB)
-     */
-    private static function loadOne(string $table, string $connection, string $key): void
-    {
+        $key = "{$connection}_{$table}";
+        if (isset(Schema::$cache[$key])) {
+            return Schema::$cache[$key];
+        }
+
         /** 先占位空字典,防止异常路径下二次穿透 DB */
         Schema::$cache[$key] = [];
 
         /** 防注入 —— 表名只允许字母数字下划线(来自 Model::NAME 常量,加层防御) */
         if (preg_match('/^[a-zA-Z0-9_]+$/', $table) !== 1) {
-            return;
+            return Schema::$cache[$key];
         }
 
         try {
             $rows = Db::connection($connection)->select("SHOW FULL COLUMNS FROM `{$table}`");
         } catch (\Throwable $e) {
             error_log("[Schema] SHOW FULL COLUMNS `{$table}` failed: {$e->getMessage()}");
-            return;
+            return Schema::$cache[$key];
         }
 
         foreach ($rows as $row) {
@@ -66,6 +63,8 @@ final class Schema
                 'type' => Type::scalar($bare),
             ];
         }
+
+        return Schema::$cache[$key];
     }
 
     /**

@@ -11,18 +11,18 @@ final class Table
 {
     /**
      * Model FQCN → 物理表名 —— 读 NAME 常量,缺则抛错;PART 分表后续接 PartTable
-     * @param class-string $modelClass
+     * @param class-string $model
      * @return string
      */
-    public static function get(string $modelClass): string
+    public static function get(string $model): string
     {
-        if (!defined("{$modelClass}::NAME")) {
+        if (!defined("{$model}::NAME")) {
             throw new ErrorException(
                 code: Code::TABLE_NOT_FOUND,
-                message: "Model {$modelClass} 缺少 NAME 常量",
+                message: "Model {$model} 缺少 NAME 常量",
                 category: 'model/table',
             );
         }
-        return (string) constant("{$modelClass}::NAME");
+        return (string) constant("{$model}::NAME");
     }
 }

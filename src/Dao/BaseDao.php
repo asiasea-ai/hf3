@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Hf3\Dao;
 
-use Hf3\Dao\Util\Inspect;
+use Hf3\Dao\Util\Converter;
 use Hf3\Model\BaseModel;
 
 abstract class BaseDao
@@ -27,11 +27,14 @@ abstract class BaseDao
         $mode   = $params['page_mode'];
         $cursor = $params['page_cursor'] ?? null;
 
-        $util = Inspect::listingUtilClass($this->model);
+        $util = Converter::modelToUtil($this->model);
         ['where' => $where, 'bind' => $bind] = $util::where($params, $mode, $cursor);
         $order = $util::orderBy($mode);
 
-        $cols = Inspect::selectField($this->model);
+        /** SELECT 列 —— 直接取 Model 全列,反引号包裹拼接 */
+        $columns = $this->model::fieldList();
+        $cols = '`' . implode('`, `', $columns) . '`';
+
         /** LIMIT 走整型内联(非参数绑定)—— SelectDB/Doris 不支持 `LIMIT ?` 占位,emulate 模式下会拼成 `LIMIT '51'` 触发语法错误 */
         $limit = $size + 1;
         $sql = "SELECT {$cols} FROM `{$table}` {$where} {$order} LIMIT {$limit}";
@@ -56,7 +59,7 @@ abstract class BaseDao
     public function count(array $params): int
     {
         $table = $this->model::tableName();
-        $util  = Inspect::listingUtilClass($this->model);
+        $util  = Converter::modelToUtil($this->model);
         ['where' => $where, 'bind' => $bind] = $util::where($params);
 
         $sql = "SELECT COUNT(*) AS `count` FROM `{$table}` {$where}";

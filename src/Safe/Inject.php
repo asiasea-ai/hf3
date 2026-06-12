@@ -2,51 +2,23 @@
 
 declare(strict_types=1);
 
-namespace Hf3\Model\Util;
+namespace Hf3\Safe;
 
 use Hf3\Code\Code;
-use Hf3\Db\Schema;
-use Hf3\Db\Util\Sql;
 use Hf3\Throwable\Exception\ErrorException;
 
-final class Safe
+/**
+ * SQL 注入特征守卫 —— 按特征模式逐个匹配,命中即抛.
+ */
+final class Inject
 {
-    /**
-     * 检查 SQL 参数绑定
-     * @param string $sql
-     * @return void
-     */
-    public static function bind(string $sql): void
-    {
-
-        $stripped = (string) preg_replace(
-            ["/'(?:[^'\\\\]|\\\\.)*'/", '/"(?:[^"\\\\]|\\\\.)*"/', '/`[^`]*`/'],
-            ['V', 'V', 'B'],
-            $sql,
-        );
-
-        $stripped = (string) preg_replace('/[A-Za-z_]\w*\.B/', 'B', $stripped);
-
-        if (preg_match('/(?<![<>!=:])=(?!=)\s*([^?B\s])/', $stripped, $m, PREG_OFFSET_CAPTURE) !== 1) {
-            return;
-        }
-
-        $context = substr($sql, max(0, (int) $m[0][1] - 20), 50);
-        throw new ErrorException(
-            code: Code::SQL_PARAM_NOT_BOUND,
-            message: "SQL 未参数绑定: `=` 右侧应为 `?` 或反引号列名,实际 `{$m[1][0]}`" . PHP_EOL . "上下文: ...{$context}...",
-            category: 'sql/bind',
-        );
-    }
-
     /**
      * 检查 SQL 注入风险
      * @param string $sql
      * @return void
      */
-    public static function inject(string $sql): void
+    public static function check(string $sql): void
     {
-
         $patterns = [
 
             '/(?:--|#)(?:\s|$)/'                            => 'SQL 行注释 (-- / #)',
@@ -106,47 +78,6 @@ final class Safe
                     ? 'SQL 注入嫌疑'
                     : "SQL 注入嫌疑: {$msg}" . PHP_EOL . "SQL: {$sql}",
                 category: 'sql/inject',
-            );
-        }
-    }
-
-    /**
-     * 检测 SQL 是否对每张受管表都带了公司隔离列 —— 跟 inject 一样:纯检测、不改写,漏带即抛.
-     *
-     * 原则:SQL 里凡是含公司列(company_id)的表,都必须按该表的公司列过滤,无例外、无逃生闸.
-     * 逐表判定:解析 SQL 涉及的全部表 → 查 Schema 哪些表受管 →
-     *   - 单表:SQL 出现 company_id(限定或不限定)即可;
-     *   - 多表(join):每张受管表必须出现限定写法 别名.company_id(或 表名.company_id),漏一张即抛.
-     * 隔离总开关关闭 / 表非受管 → 放行.
-     * @param string $sql 待入库 SQL
-     * @param string $connection 连接池名(逐表查 Schema 用),调用方从 model::CONNECTION 传入
-     * @return void
-     */
-    public static function company(string $sql, string $connection): void
-    {
-        $tables = Sql::tables($sql);
-        $multiTable = count($tables) > 1;
-
-        foreach ($tables as $table => $alias) {
-            $column = Company::field(array_keys(Schema::inspect($table, $connection)));
-            if ($column === '') {
-                continue;
-            }
-
-            $reference = $alias !== '' ? $alias : $table;
-            $pattern = $multiTable
-                ? '/\b' . preg_quote($reference, '/') . '\s*\.\s*' . preg_quote($column, '/') . '\b/i'
-                : '/\b' . preg_quote($column, '/') . '\b/i';
-            if (preg_match($pattern, $sql) === 1) {
-                continue;
-            }
-
-            throw new ErrorException(
-                code: Code::MODEL_COMPANY_SQL_UNGUARDED,
-                message: isProduction()
-                    ? '请求被拒绝'
-                    : "受管表 `{$table}` 未按公司列过滤(需 {$reference}.{$column})—— 数据隔离风险" . PHP_EOL . "SQL: {$sql}",
-                category: 'sql/company',
             );
         }
     }

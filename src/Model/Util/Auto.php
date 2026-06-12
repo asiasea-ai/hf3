@@ -12,74 +12,68 @@ use Psr\Container\NotFoundExceptionInterface;
 class Auto
 {
     /**
-     * time —— $columns 是表列名 list,按 etc 候选求交集填 now
-     * @param list<string> $columns
-     * @param string $kind
+     * time —— 由 Model FQCN 取表列名 list,表实际含 etc 配置的时间列时返 [列名 => now],否则返空
+     * @param class-string $model Model FQCN
+     * @param string $kind 事件类型(create_time / update_time / delete_time)
      * @return array
      */
-    public static function time(array $columns, string $kind): array
+    public static function time(string $model, string $kind): array
     {
-        $candidates = etc('auto.time.' . $kind) ?? [];
-        if (!is_array($candidates)) {
+        /** 配置的时间列名 */
+        $field = (string) (etc('auto.time.' . $kind) ?? '');
+        if (superEmpty($field)) {
             return [];
         }
 
-        $matched = array_values(array_filter(
-            $candidates,
-            static fn ($col): bool => in_array((string) $col, $columns, true),
-        ));
-        if ($matched === []) {
+        /** 表实际含该列才注入 */
+        $columns = $model::fieldList();
+        if (!in_array($field, $columns, true)) {
             return [];
         }
 
-        return array_fill_keys($matched, date('Y-m-d H:i:s'));
+        return [$field => date('Y-m-d H:i:s')];
     }
 
     /**
-     * accountId —— $columns 是表列名 list,按 etc 候选求交集填当前用户 id
-     * @param list<string> $columns
-     * @param string $kind
+     * accountId —— 由 Model FQCN 取表列名 list,表实际含 etc 配置的账号列时返 [列名 => 当前用户 id],否则返空
+     * @param class-string $model Model FQCN
+     * @param string $kind 事件类型(create / update / delete)
      * @return array
      */
-    public static function accountId(array $columns, string $kind): array
+    public static function accountId(string $model, string $kind): array
     {
-        $candidates = etc('auto.account.' . $kind) ?? [];
-        if (!is_array($candidates)) {
+        /** 配置的账号列名 */
+        $field = (string) (etc('auto.account.' . $kind) ?? '');
+        if (superEmpty($field)) {
             return [];
         }
 
-        $matched = array_values(array_filter(
-            $candidates,
-            static fn ($col): bool => in_array((string) $col, $columns, true),
-        ));
-        if ($matched === []) {
+        /** 表实际含该列才注入 */
+        $columns = $model::fieldList();
+        if (!in_array($field, $columns, true)) {
             return [];
         }
 
-        return array_fill_keys($matched, Request::getAccountId());
+        return [$field => Request::getAccountId()];
     }
 
     /**
-     * managed —— 全部由框架强制接管的审计字段名(time + account 两族,各 kind 候选列名 union).
-     *
-     * BaseModel::save/update 等写入路径用本方法去过滤掉外部 $data 里的同名字段——
-     * 即使前端误传 update_time / delete_time / create_account_id 也直接丢弃,
-     * 紧接着 Auto::time / Auto::accountId 按当前 op 注入正确的审计字段值.
+     * timeField —— 时间族审计列名 list(etc auto.time 各 kind 的列名值)
      * @return list<string>
      */
-    public static function managed(): array
+    public static function timeField(): array
     {
-        $cols = [];
-        foreach ((array) (etc('auto.time') ?? []) as $candidates) {
-            foreach ((array) $candidates as $col) {
-                $cols[] = (string) $col;
-            }
-        }
-        foreach ((array) (etc('auto.account') ?? []) as $candidates) {
-            foreach ((array) $candidates as $col) {
-                $cols[] = (string) $col;
-            }
-        }
-        return array_values(array_unique($cols));
+        $cols = (array) (etc('auto.time') ?? []);
+        return array_values($cols);
+    }
+
+    /**
+     * accountField —— 账号族审计列名 list(etc auto.account 各 kind 的列名值)
+     * @return list<string>
+     */
+    public static function accountField(): array
+    {
+        $cols = (array) (etc('auto.account') ?? []);
+        return array_values($cols);
     }
 }
