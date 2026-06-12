@@ -6,6 +6,7 @@ namespace Hf3\Doc;
 
 use Hf3\Doc\Util\DtoMap;
 use Hf3\Doc\Util\Envelope;
+use Hf3\Doc\Util\Modules;
 use Hf3\Doc\Util\RouteCollect;
 use Hf3\Doc\Util\Tagger;
 use Hf3\Doc\Util\Type;
@@ -49,8 +50,7 @@ final class Hydrate
             $oasPath = Hydrate::normalizePath($r['path']);
             $paths[$oasPath][strtolower($r['method'])] = $op;
 
-            $moduleClass = Tagger::moduleClassOf($layer, $biz);
-            $label = Tagger::labelOf($moduleClass);
+            $label = Modules::labelOf($layer, $biz);
             $displayName = Tagger::tagDisplayOf($biz, $label);
             $ringLayerTags[$ring][$layer][$tagName] = $displayName;
         }

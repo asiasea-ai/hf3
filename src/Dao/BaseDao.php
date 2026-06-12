@@ -7,7 +7,7 @@ namespace Hf3\Dao;
 use Hf3\Dao\Util\Inspect;
 use Hf3\Model\BaseModel;
 use Hf3\Model\Util\Field;
-use Hf3\Model\Util\Subject;
+use Hf3\Model\Util\Company;
 use Hf3\Throwable\Exception\ErrorException;
 
 abstract class BaseDao
@@ -20,7 +20,7 @@ abstract class BaseDao
     /**
      * 列表查询的强制 WHERE 等值条件 —— Dao 持有 model,据此算出必带的过滤:
      *   - 软删列 delete_flg = 0(只查未删行)
-     *   - 主体列 company_id = 当前租户(SaaS 隔离,受管表 fail-closed,无上下文抛错)
+     *   - 公司列 company_id = 当前公司(SaaS 隔离,受管表 fail-closed,无上下文抛错)
      * 返回 [列名 => 值] map,交给 Listing::where 逐条 $qb->where 注入.
      * @return array<string, mixed>
      */
@@ -34,9 +34,9 @@ abstract class BaseDao
             $forced[$deleteField] = 0;
         }
 
-        [$subjectColumn, $subjectId] = Subject::filter($columns);
-        if ($subjectColumn !== '') {
-            $forced[$subjectColumn] = $subjectId;
+        [$companyColumn, $companyId] = Company::filter($columns);
+        if ($companyColumn !== '') {
+            $forced[$companyColumn] = $companyId;
         }
 
         return $forced;

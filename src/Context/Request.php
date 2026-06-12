@@ -10,11 +10,12 @@ use Hyperf\Snowflake\IdGeneratorInterface;
 
 final class Request
 {
-    private const string KEY_TRACE_ID   = 'es37_trace_id';
+    private const string KEY_TRACE_ID = 'es37_trace_id';
     private const string KEY_STARTED_AT = 'es37_started_at';
     private const string KEY_ACCOUNT_ID = 'es37_account_id';
-    private const string KEY_IDENTITY   = 'es37_identity';
-    private const string KEY_SOURCE     = 'es37_source';
+    private const string KEY_COMPANY_ID = 'es37_company_id';
+    private const string KEY_IDENTITY = 'es37_identity';
+    private const string KEY_SOURCE = 'es37_source';
 
     /** HTTP 请求来源标识 */
     public const string SOURCE_HTTP = 'http';
@@ -28,7 +29,7 @@ final class Request
     {
         $container = ApplicationContext::getContainer();
         $idGenerator = $container->get(IdGeneratorInterface::class);
-        $traceId = (string) $idGenerator->generate();
+        $traceId = (string)$idGenerator->generate();
         Context::set(Request::KEY_TRACE_ID, $traceId);
         Context::set(Request::KEY_STARTED_AT, microtime(true));
         Context::set(Request::KEY_SOURCE, $source);
@@ -40,7 +41,7 @@ final class Request
      */
     public static function traceId(): string
     {
-        return (string) (Context::get(Request::KEY_TRACE_ID) ?? '-1');
+        return (string)(Context::get(Request::KEY_TRACE_ID) ?? '-1');
     }
 
     /**
@@ -80,13 +81,23 @@ final class Request
         Context::set(Request::KEY_ACCOUNT_ID, $accountId);
     }
 
+    public static function setCompanyId(int $companyId): void
+    {
+        Context::set(Request::KEY_COMPANY_ID, $companyId);
+    }
+
     /**
      * 获取 accountId
      * @return int
      */
     public static function getAccountId(): int
     {
-        return (int) (Context::get(Request::KEY_ACCOUNT_ID) ?? 0);
+        return (int)(Context::get(Request::KEY_ACCOUNT_ID) ?? 0);
+    }
+
+    public static function getCompanyId(): int
+    {
+        return (int)(Context::get(Request::KEY_COMPANY_ID) ?? 0);
     }
 
     /**
@@ -117,11 +128,11 @@ final class Request
     {
         $startedAt = Context::get(Request::KEY_STARTED_AT);
         return [
-            'trace_id'   => Request::traceId(),
+            'trace_id' => Request::traceId(),
             'started_at' => is_float($startedAt) ? $startedAt : null,
             'account_id' => Request::getAccountId(),
-            'source'     => Request::source(),
-            'oidc'   => Request::identity(),
+            'source' => Request::source(),
+            'oidc' => Request::identity(),
         ];
     }
 
@@ -138,7 +149,7 @@ final class Request
         if (isset($snapshot['started_at']) && is_float($snapshot['started_at'])) {
             Context::set(Request::KEY_STARTED_AT, $snapshot['started_at']);
         }
-        Request::setAccountId((int) ($snapshot['account_id'] ?? 0));
+        Request::setAccountId((int)($snapshot['account_id'] ?? 0));
         if (isset($snapshot['source']) && is_string($snapshot['source']) && $snapshot['source'] !== '') {
             Context::set(Request::KEY_SOURCE, $snapshot['source']);
         }

@@ -18,6 +18,7 @@ enum Code: int implements CodeInterface
     case AUTH_REQUIRED = -401;
 
     case AUTH_FAILED = -4011;
+    case AUTH_COMPANY_ID_FAILED = -4012;
 
     case RATE_LIMIT_EXCEEDED = -429;
 
@@ -47,9 +48,9 @@ enum Code: int implements CodeInterface
     case MODEL_FIND_ONE_FIELD_NULL = -3505;
     case MODEL_SAVE_FIELD_NULL = -3506;
 
-    case MODEL_SUBJECT_AMBIGUOUS     = -3507;
-    case MODEL_SUBJECT_MISSING       = -3508;
-    case MODEL_SUBJECT_SQL_UNGUARDED = -3509;
+    case MODEL_COMPANY_AMBIGUOUS     = -3507;
+    case MODEL_COMPANY_MISSING       = -3508;
+    case MODEL_COMPANY_SQL_UNGUARDED = -3509;
 
     case ADAPTER_FIELD_MISSING       = -3601;
 
@@ -71,6 +72,7 @@ enum Code: int implements CodeInterface
             Code::DTO_INVALID               => 'Invalid request parameters',
             Code::AUTH_REQUIRED             => '未登录,请先登录',
             Code::AUTH_FAILED               => 'Token 无效或已过期',
+            Code::AUTH_COMPANY_ID_FAILED    => '缺少主体身份,无法确定所属公司',
             Code::RATE_LIMIT_EXCEEDED       => '操作太频繁,请稍后再试',
             Code::CURL_TRANSPORT_FAIL       => '远程网络访问失败',
             Code::CURL_HTTP_NOT_OK          => '远程网络返回非预期状态',
@@ -92,9 +94,9 @@ enum Code: int implements CodeInterface
             Code::MODEL_SAVE_FIELD_NULL        => '未找到新增的字段',
             Code::MODEL_FIND_MULTI_ROWS     => '单行接口命中多行,数据完整性问题',
             Code::MODEL_DELETE_FLG_AMBIGUOUS => 'FIELDS 同时命中多个软删候选列,schema 错配',
-            Code::MODEL_SUBJECT_AMBIGUOUS   => '表同时命中多个主体隔离列,schema 错配',
-            Code::MODEL_SUBJECT_MISSING     => '受管表操作缺少主体上下文,跨主体/系统操作请用 Subject::without 显式放行',
-            Code::MODEL_SUBJECT_SQL_UNGUARDED => '裸 SQL 操作受管表但 SQL 未带主体列,数据隔离风险',
+            Code::MODEL_COMPANY_AMBIGUOUS   => '表同时命中多个公司隔离列,schema 错配',
+            Code::MODEL_COMPANY_MISSING     => '受管表操作缺少公司上下文,跨公司/系统操作请用 Company::without 显式放行',
+            Code::MODEL_COMPANY_SQL_UNGUARDED => '裸 SQL 操作受管表但 SQL 未带公司列,数据隔离风险',
             Code::ADAPTER_FIELD_MISSING     => 'Adapter 源 VO 缺字段且目标构造器无 default',
             Code::COROUTINE_TIMEOUT         => 'waitGroup 超时',
             Code::SIGN_KEY_MISSING          => 'SIGN_RSA_PUBLIC 未配置',

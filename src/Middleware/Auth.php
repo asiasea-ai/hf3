@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Hf3\Middleware;
 
+use Hf3\Code\Code;
 use Hf3\Context\Request as Ctx;
 use Hf3\Policy\Gate;
+use Hf3\Throwable\Exception\AuthException;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\MiddlewareInterface;
@@ -41,11 +43,23 @@ abstract class Auth implements MiddlewareInterface
             return $handler->handle($request);
         }
 
-        /** 验签取身份写入上下文(account_id 缺省回退 sub) */
+        /** 写入身份对象 */
         $identity  = $this->identify($request);
-        $accountId = (int) ($identity['account_id'] ?? $identity['sub'] ?? 0);
-        Ctx::setAccountId($accountId);
         Ctx::setIdentity((object) $identity);
+
+        /** 写入账号 ID */
+        $accountId = $identity['account_id'] ?? null;
+        if (superEmpty($accountId)) {
+            throw AuthException::fromCode(Code::AUTH_FAILED);
+        }
+        Ctx::setAccountId($accountId);
+
+        /** 写入主体 ID */
+        $companyId = (int) ($identity['company_id'] ?? null);
+        if (superEmpty($companyId)) {
+            throw AuthException::fromCode(Code::AUTH_COMPANY_ID_FAILED);
+        }
+        Ctx::setCompanyId($companyId);
 
         return $handler->handle($request);
     }

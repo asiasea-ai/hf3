@@ -10,7 +10,7 @@ use Hf3\Model\Util\Adapter;
 use Hf3\Model\Util\Auto;
 use Hf3\Model\Util\Field;
 use Hf3\Model\Util\Save;
-use Hf3\Model\Util\Subject;
+use Hf3\Model\Util\Company;
 use Hf3\Model\Util\Table;
 use Hf3\Throwable\Exception\ErrorException;
 use Hf3\Throwable\Exception\WarnException;
@@ -83,8 +83,8 @@ abstract class BaseModel
         $columns = Field::select(static::class);
         $where = Field::clean($columns, $where);
 
-        /** 受管表强制注入当前主体过滤 */
-        $where = Subject::enforce($columns, $where);
+        /** 受管表强制注入当前公司过滤 */
+        $where = Company::enforce($columns, $where);
 
         /** 删除条件或表字段不能为空 */
         if ($where === [] || $columns === []) {
@@ -106,9 +106,9 @@ abstract class BaseModel
             $qb->limit($limit);
         }
 
-        /** sql 注入检测 + 主体隔离检测 */
+        /** sql 注入检测 + 公司隔离检测 */
         Util\Safe::inject($qb->toSql());
-        Util\Safe::subject($qb->toSql(), static::CONNECTION);
+        Util\Safe::company($qb->toSql(), static::CONNECTION);
 
         /** 软删除 */
         if (!superEmpty($deleteField)) {
@@ -135,8 +135,8 @@ abstract class BaseModel
         /** SQL 注入检测 */
         Util\Safe::inject($sql);
 
-        /** 主体隔离检测:SQL 涉及的每张受管表都必须按主体列过滤 */
-        Util\Safe::subject($sql, static::CONNECTION);
+        /** 公司隔离检测:SQL 涉及的每张受管表都必须按公司列过滤 */
+        Util\Safe::company($sql, static::CONNECTION);
 
         /** 获取查询结果 */
         $rows = Db::connection(static::CONNECTION)->select($sql, $params);
@@ -159,8 +159,8 @@ abstract class BaseModel
         Util\Safe::bind($sql);
         Util\Safe::inject($sql);
 
-        /** 主体隔离检测:SQL 涉及的每张受管表都必须按主体列过滤 */
-        Util\Safe::subject($sql, static::CONNECTION);
+        /** 公司隔离检测:SQL 涉及的每张受管表都必须按公司列过滤 */
+        Util\Safe::company($sql, static::CONNECTION);
 
         $rows = Db::connection(static::CONNECTION)->select($sql, $params);
         if ($rows === []) {
@@ -184,8 +184,8 @@ abstract class BaseModel
         Util\Safe::bind($sql);
         Util\Safe::inject($sql);
 
-        /** 主体隔离检测:SQL 涉及的每张受管表都必须按主体列过滤 */
-        Util\Safe::subject($sql, static::CONNECTION);
+        /** 公司隔离检测:SQL 涉及的每张受管表都必须按公司列过滤 */
+        Util\Safe::company($sql, static::CONNECTION);
 
         return Db::connection(static::CONNECTION)->affectingStatement($sql, $params);
     }
@@ -204,9 +204,9 @@ abstract class BaseModel
         $data = Field::clean($columns, $data);
         $where = Field::clean($columns, $where);
 
-        /** 受管表:WHERE 强制带主体,data 剥离主体列(禁止经 update 改主体归属) */
-        $where = Subject::enforce($columns, $where);
-        $data = Subject::strip($columns, $data);
+        /** 受管表:WHERE 强制带公司,data 剥离公司列(禁止经 update 改公司归属) */
+        $where = Company::enforce($columns, $where);
+        $data = Company::strip($columns, $data);
 
         if ($data === [] || $where === []) {
             return 0;
@@ -236,7 +236,7 @@ abstract class BaseModel
         }
 
         Util\Safe::inject($qb->toSql());
-        Util\Safe::subject($qb->toSql(), static::CONNECTION);
+        Util\Safe::company($qb->toSql(), static::CONNECTION);
 
         return $qb->update($data);
     }
@@ -252,8 +252,8 @@ abstract class BaseModel
         $columns = Field::select(static::class);
         $data = Field::clean($columns, $data);
 
-        /** 受管表强制注入当前主体 */
-        $data = Subject::enforce($columns, $data);
+        /** 受管表强制注入当前公司 */
+        $data = Company::enforce($columns, $data);
 
         if ($data === []) {
             throw new ErrorException(Code::MODEL_SAVE_FIELD_NULL);
@@ -267,10 +267,10 @@ abstract class BaseModel
         $table = static::tableName();
         ['bind' => $bind, 'sql' => $sql] = Save::all($table, [$data]);
 
-        /** 参数绑定检测 注入检测 主体隔离检测 */
+        /** 参数绑定检测 注入检测 公司隔离检测 */
         Util\Safe::bind($sql);
         Util\Safe::inject($sql);
-        Util\Safe::subject($sql, static::CONNECTION);
+        Util\Safe::company($sql, static::CONNECTION);
 
         /** @var Connection $conn */
         $conn = Db::connection(static::CONNECTION);
@@ -302,9 +302,9 @@ abstract class BaseModel
             $dataList,
         );
 
-        /** 受管表逐行强制注入当前主体 */
+        /** 受管表逐行强制注入当前公司 */
         $dataList = array_map(
-            static fn(array $row): array => Subject::enforce($columns, $row),
+            static fn(array $row): array => Company::enforce($columns, $row),
             $dataList,
         );
 
@@ -321,7 +321,7 @@ abstract class BaseModel
 
         Util\Safe::bind($sql);
         Util\Safe::inject($sql);
-        Util\Safe::subject($sql, static::CONNECTION);
+        Util\Safe::company($sql, static::CONNECTION);
 
         return Db::connection(static::CONNECTION)->affectingStatement($sql, $bind);
     }
@@ -343,8 +343,8 @@ abstract class BaseModel
         $columns = Field::select(static::class);
         $where = Field::clean($columns, $where);
 
-        /** 受管表强制注入当前主体过滤 */
-        $where = Subject::enforce($columns, $where);
+        /** 受管表强制注入当前公司过滤 */
+        $where = Company::enforce($columns, $where);
 
         if ($where === [] || $columns === []) {
             throw new ErrorException(Code::MODEL_FIND_ONE_FIELD_NULL);
@@ -372,8 +372,8 @@ abstract class BaseModel
             }
         }
 
-        /** 主体隔离检测 —— 受管表必须按主体列过滤 */
-        Util\Safe::subject($qb->toSql(), static::CONNECTION);
+        /** 公司隔离检测 —— 受管表必须按公司列过滤 */
+        Util\Safe::company($qb->toSql(), static::CONNECTION);
 
         /** 查询结果 */
         $rows = $qb->get()->toArray();

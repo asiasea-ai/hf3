@@ -100,32 +100,6 @@ final class Tagger
     }
 
     /**
-     * 由 layer + biz 拼出业务模块常量类 FQCN,形如 `App\Module\Iam\Account\Constant\Module`
-     * @param string $layer
-     * @param array<int, string> $biz
-     * @return string
-     */
-    public static function moduleClassOf(string $layer, array $biz): string
-    {
-        $segs = array_merge(['App', $layer], $biz, ['Constant', 'Module']);
-        return implode('\\', $segs);
-    }
-
-    /**
-     * 反射读取业务模块常量类的 LABEL 中文名;类不存在或常量缺失时返回 null
-     * @param string $moduleClass
-     * @return string|null
-     */
-    public static function labelOf(string $moduleClass): ?string
-    {
-        if (!class_exists($moduleClass) || !defined($moduleClass . '::LABEL')) {
-            return null;
-        }
-        $label = constant($moduleClass . '::LABEL');
-        return is_string($label) && $label !== '' ? $label : null;
-    }
-
-    /**
      * 生成 OpenAPI tags + x-tagGroups(Scalar / ReDoc 两级分组,组名形如 `Web 管理后台 - Module`)
      * @param array<string, array<string, array<string, string>>> $ringLayerTags ring => layer => [tagName => displayName]
      * @return array{0: array<int, array<string, mixed>>, 1: array<int, array<string, mixed>>}

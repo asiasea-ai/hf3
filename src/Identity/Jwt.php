@@ -90,6 +90,12 @@ class Jwt
             throw new WarnException(code: Code::AUTH_FAILED, message: 'token aud 不匹配');
         }
 
+        /** 验证主体 iD */
+        $companyId = $payload['company_id'] ?? null;
+        if(superEmpty($companyId)){
+            throw new WarnException(code: Code::AUTH_COMPANY_ID_FAILED, message: 'company_id aud 不匹配');
+        }
+
         return $payload;
     }
 }

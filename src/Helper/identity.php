@@ -12,3 +12,9 @@ function accountId(): int
 {
     return Request::getAccountId();
 }
+
+function companyId(): int
+{
+    return Request::getCompanyId();
+}
+

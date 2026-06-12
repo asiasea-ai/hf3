@@ -111,9 +111,9 @@ final class Safe
     }
 
     /**
-     * 检测 SQL 是否对每张受管表都带了主体(租户)隔离列 —— 跟 inject 一样:纯检测、不改写,漏带即抛.
+     * 检测 SQL 是否对每张受管表都带了公司隔离列 —— 跟 inject 一样:纯检测、不改写,漏带即抛.
      *
-     * 原则:SQL 里凡是含主体列(company_id)的表,都必须按该表的主体列过滤,无例外、无逃生闸.
+     * 原则:SQL 里凡是含公司列(company_id)的表,都必须按该表的公司列过滤,无例外、无逃生闸.
      * 逐表判定:解析 SQL 涉及的全部表 → 查 Schema 哪些表受管 →
      *   - 单表:SQL 出现 company_id(限定或不限定)即可;
      *   - 多表(join):每张受管表必须出现限定写法 别名.company_id(或 表名.company_id),漏一张即抛.
@@ -122,13 +122,13 @@ final class Safe
      * @param string $connection 连接池名(逐表查 Schema 用),默认 main
      * @return void
      */
-    public static function subject(string $sql, string $connection = 'main'): void
+    public static function company(string $sql, string $connection = 'main'): void
     {
         $tables = Sql::tables($sql);
         $multiTable = count($tables) > 1;
 
         foreach ($tables as $table => $alias) {
-            $column = Subject::field(array_keys(Schema::inspect($table, $connection)));
+            $column = Company::field(array_keys(Schema::inspect($table, $connection)));
             if ($column === '') {
                 continue;
             }
@@ -142,11 +142,11 @@ final class Safe
             }
 
             throw new ErrorException(
-                code: Code::MODEL_SUBJECT_SQL_UNGUARDED,
+                code: Code::MODEL_COMPANY_SQL_UNGUARDED,
                 message: isProduction()
                     ? '请求被拒绝'
-                    : "受管表 `{$table}` 未按主体列过滤(需 {$reference}.{$column})—— 数据隔离风险" . PHP_EOL . "SQL: {$sql}",
-                category: 'sql/subject',
+                    : "受管表 `{$table}` 未按公司列过滤(需 {$reference}.{$column})—— 数据隔离风险" . PHP_EOL . "SQL: {$sql}",
+                category: 'sql/company',
             );
         }
     }
