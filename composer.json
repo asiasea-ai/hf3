@@ -106,7 +106,7 @@
         "smarty/smarty": "v5.8.0",
         "symfony/config": "v8.0.10",
         "symfony/dotenv": "v8.0.11",
-        "symfony/mailer": "v7.4.8",
+        "symfony/mailer": "v7.4.12",
         "symfony/uid": "^8.0",
         "symfony/validator": "v8.0.10",
         "tecnickcom/tcpdf": "6.11.3",
