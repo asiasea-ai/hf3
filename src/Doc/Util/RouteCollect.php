@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Hf3\Doc\Util;
 
 use Hyperf\Context\ApplicationContext;
+use Hyperf\Contract\ConfigInterface;
 use Hyperf\HttpServer\MiddlewareManager;
 use Hyperf\HttpServer\Router\DispatcherFactory;
 use Hyperf\HttpServer\Router\Handler;
@@ -30,6 +31,12 @@ final class RouteCollect
         $container = ApplicationContext::getContainer();
         $factory   = $container->get(DispatcherFactory::class);
         $collector = $factory->getRouter($serverName);
+
+        /** 全局中间件不进 MiddlewareManager,从 config 取出与路由级合并 */
+        $config = $container->get(ConfigInterface::class);
+        $globalsRaw = (array) $config->get('middlewares.' . $serverName, []);
+        $globals = array_filter($globalsRaw, 'is_string');
+        $globals = array_values($globals);
         /** FastRoute getData() 返 [static, variable]:static=[method=>[path=>Handler]],variable=[method=>[{regex, routeMap:[id=>[Handler, vars]]}, ...]] */
         $data      = $collector->getData();
 
@@ -42,7 +49,7 @@ final class RouteCollect
                     continue;
                 }
                 foreach ($routes as $path => $handler) {
-                    $row = RouteCollect::buildRow((string) $method, (string) $path, $handler);
+                    $row = RouteCollect::buildRow((string) $method, (string) $path, $handler, $globals);
                     if ($row !== null) {
                         $out[] = $row;
                     }
@@ -70,7 +77,7 @@ final class RouteCollect
                         if ($path === '') {
                             continue;
                         }
-                        $row = RouteCollect::buildRow((string) $method, $path, $handler);
+                        $row = RouteCollect::buildRow((string) $method, $path, $handler, $globals);
                         if ($row !== null) {
                             $out[] = $row;
                         }
@@ -83,9 +90,13 @@ final class RouteCollect
 
     /**
      * 标准化一条路由
+     * @param string $method
+     * @param string $path
+     * @param mixed $handler
+     * @param array<int, string> $globals server 级全局中间件(caller 从 config 取好)
      * @return array<string, mixed>|null
      */
-    private static function buildRow(string $method, string $path, mixed $handler): ?array
+    private static function buildRow(string $method, string $path, mixed $handler, array $globals): ?array
     {
         if (!$handler instanceof Handler) {
             return null;
@@ -100,7 +111,8 @@ final class RouteCollect
         }
 
         $placeholders = RouteCollect::extractPlaceholders($path);
-        $middlewares  = MiddlewareManager::get('http', $path, strtoupper($method));
+        $routeMws     = MiddlewareManager::get('http', $path, strtoupper($method));
+        $middlewares  = array_merge($globals, $routeMws);
 
         return [
             'method'       => strtoupper($method),

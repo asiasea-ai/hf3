@@ -9,7 +9,7 @@ namespace Hf3\Middleware\Util;
  */
 final class Ring
 {
-    private const array PREFIXES = ['/web/', '/App/', '/rpc/'];
+    private const array PREFIXES = ['/web/', '/app/', '/rpc/'];
 
     /**
      * 路径是否落在业务 ring 内

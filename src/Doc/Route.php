@@ -14,6 +14,6 @@ if (isProduction()) {
     return;
 }
 
-/** 路径不在 /web/ /app/ /rpc/ 业务 ring 下,JwtAuth 中间件自动放行(见 Hf3\Middleware\Util\Ring) */
+/** 路径不在 /web/ /app/ /rpc/ 业务 ring 下,Auth 系中间件自动放行(见 Hf3\Middleware\Util\Ring) */
 Router::get('/__doc', [DocController::class, 'ui']);
 Router::get('/__doc/openapi.json', [DocController::class, 'spec']);

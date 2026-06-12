@@ -12,6 +12,8 @@ use Hf3\Doc\Util\Tagger;
 use Hf3\Doc\Util\Type;
 use Hf3\Doc\Util\VoMap;
 use Hf3\Identity\Util\Header;
+use Hf3\Middleware\Auth;
+use Hf3\Middleware\Util\Ring;
 use Hf3\Spl\SplDto;
 use Hf3\Spl\SplVo;
 use ReflectionMethod;
@@ -143,9 +145,11 @@ final class Hydrate
             $op['requestBody'] = $body;
         }
 
-        $op['responses'] = Hydrate::buildResponses($voClass, $schemas, $r['middlewares']);
+        $auth = Hydrate::needsAuth($r['middlewares'], (string) $r['path']);
 
-        if (Hydrate::needsAuth($r['middlewares'])) {
+        $op['responses'] = Hydrate::buildResponses($voClass, $schemas, $auth);
+
+        if ($auth) {
             $op['security'] = [['HfAppId' => [], 'HfJwt' => []]];
         }
 
@@ -185,13 +189,13 @@ final class Hydrate
     /**
      * 构造响应表 —— 与 Mapping::statusOf() 当前行为对齐:
      *   - 业务异常一律走 200 信封(code < Json::SUCCESS_MIN 即失败),所以默认只暴露 200
-     *   - 走 JwtAuth 的路由,鉴权失败抛 401,额外暴露一档 401
+     *   - 需要鉴权的路由,鉴权失败抛 401,额外暴露一档 401
      * @param class-string<SplVo>|null $voClass
      * @param array<string, array<string, mixed>> &$schemas
-     * @param array<int, string> $middlewares
+     * @param bool $auth 路由是否需要鉴权(caller 用 needsAuth 算好)
      * @return array<string, mixed>
      */
-    private static function buildResponses(?string $voClass, array &$schemas, array $middlewares): array
+    private static function buildResponses(?string $voClass, array &$schemas, bool $auth): array
     {
         $dataRef = $voClass === null
             ? ['nullable' => true]
@@ -200,21 +204,27 @@ final class Hydrate
         $responses = [
             '200' => Envelope::successResponse($dataRef),
         ];
-        if (Hydrate::needsAuth($middlewares)) {
+        if ($auth) {
             $responses['401'] = Envelope::errorResponse('未登录 / Token 无效');
         }
         return $responses;
     }
 
     /**
-     * 路由是否带 JwtAuth middleware
+     * 路由是否需要会话鉴权 —— 业务 ring 内且挂了 Auth 系中间件
+     * 注:Auth 子类运行时只守自己的 ring(见 Auth::process),白名单路由也会放行,
+     * 这里按"业务 ring + 存在 Auth 中间件"近似,文档可能对个别放行路由标多鉴权.
      * @param array<int, string> $middlewares
+     * @param string $path
      * @return bool
      */
-    private static function needsAuth(array $middlewares): bool
+    private static function needsAuth(array $middlewares, string $path): bool
     {
+        if (!Ring::isBusiness($path)) {
+            return false;
+        }
         foreach ($middlewares as $m) {
-            if (str_ends_with($m, '\\JwtAuth') || str_ends_with($m, '\\JwtAuthMiddleware')) {
+            if (is_subclass_of($m, Auth::class)) {
                 return true;
             }
         }
