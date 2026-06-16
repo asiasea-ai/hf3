@@ -25,7 +25,10 @@ class Save
     public static function all(string $model, array $dataList): array
     {
         $companyField = Field::companyId($model);
-        $company = superEmpty($companyField) ? [] : [$companyField => companyId()];
+//        $company = superEmpty($companyField) ? [] : [$companyField => companyId()];
+        if (!superEmpty($companyField)) {
+            $where[$companyField] ??= companyId();
+        }
         $time = Auto::time($model, 'create_time');
         $account = Auto::accountId($model, 'create');
 

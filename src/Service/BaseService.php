@@ -45,7 +45,7 @@ abstract class BaseService
         ['list' => $rows, 'next_page' => $nextPage] = $page;
 
         /** 编码边界 cursor:payload = [create_time, id],前端原样回传 */
-        [$prev, $next] = Page::cursors($mode, $rows, $nextPage, static fn(array $r): string => Page::encode([
+        [$prev, $next] = Page::cursor($mode, $rows, $nextPage, static fn(array $r): string => Page::encode([
             'create_time' => $r['create_time'] ?? null,
             'id'          => $r['id']          ?? null,
         ]));
