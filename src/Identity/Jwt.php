@@ -81,12 +81,18 @@ class Jwt
         $audience = (string)($jwks['audience'] ?? '');
 
         /** 校验 iss */
-        if ($issuer !== '' && ($payload['iss'] ?? '') !== $issuer) {
+        if (superEmpty($issuer)) {
+            throw new WarnException(code: Code::AUTH_FAILED, message: 'client未注册或缺少issuer配置');
+        }
+        if (($payload['iss'] ?? '') !== $issuer) {
             throw new WarnException(code: Code::AUTH_FAILED, message: 'token iss 不匹配');
         }
 
         /** 校验 aud */
-        if ($audience !== '' && ($payload['aud'] ?? '') !== $audience) {
+        if (superEmpty($audience)) {
+            throw new WarnException(code: Code::AUTH_FAILED, message: 'client未注册或缺少audience配置');
+        }
+        if (($payload['aud'] ?? '') !== $audience) {
             throw new WarnException(code: Code::AUTH_FAILED, message: 'token aud 不匹配');
         }
 

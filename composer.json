@@ -110,7 +110,8 @@
         "symfony/uid": "~8.1.0",
         "symfony/validator": "~8.1.0",
         "tecnickcom/tcpdf": "~6.11.3",
-        "victorybiz/geoip-location": "~1.1.2"
+        "victorybiz/geoip-location": "~1.1.2",
+        "hyperf/flysystem-oss": "^1.4"
     },
     "suggest": {
         "ext-pdo_mysql": "Required to use MySQL Client.",
