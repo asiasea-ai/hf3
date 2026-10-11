@@ -371,10 +371,10 @@ abstract class BaseModel
             $where[$deleteField] ??= 0;
         }
 
-        /** 受管表强制:WHERE 限定当前公司(覆盖外部传入),防止越权查他人公司 */
+        /** 受管表强制:WHERE 限定可见公司(覆盖外部传入),防止越权查他人公司;单/多由 auto.company.multi 决定,多主体走 whereIn */
         $companyField = Field::companyId(static::class);
         if (!superEmpty($companyField)) {
-            $where[$companyField] ??= companyId();
+            $where[$companyField] ??= companyValue();
         }
 
         /** 没传查什么字段就给默认 */
