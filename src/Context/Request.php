@@ -16,6 +16,8 @@ final class Request
     private const string KEY_COMPANY_ID = 'es37_company_id';
     private const string KEY_IDENTITY = 'es37_identity';
     private const string KEY_SOURCE = 'es37_source';
+    private const string KEY_COMPANY_CODE = 'es37_company_code';
+
 
     /** HTTP 请求来源标识 */
     public const string SOURCE_HTTP = 'http';
@@ -156,5 +158,15 @@ final class Request
         if (isset($snapshot['oidc']) && is_object($snapshot['oidc'])) {
             Request::setIdentity($snapshot['oidc']);
         }
+    }
+
+    public static function setCompanyCode(string $companyCode): void
+    {
+        Context::set(Request::KEY_COMPANY_CODE, $companyCode);
+    }
+
+    public static function getCompanyCode(): string
+    {
+        return (string)(Context::get(Request::KEY_COMPANY_CODE) ?? '');
     }
 }
