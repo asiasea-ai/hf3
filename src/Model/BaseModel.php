@@ -106,7 +106,7 @@ abstract class BaseModel
         /** 受管表强制:WHERE 限定当前公司(覆盖外部传入),防止越权删他人公司 */
         $companyField = Field::companyId(static::class);
         if (!superEmpty($companyField)) {
-            $where[$companyField] ??= companyId();
+            $where[$companyField] ??= companyKey();
         }
 
         /** 动态获取表名 */
@@ -239,7 +239,7 @@ abstract class BaseModel
         /** 受管表强制:WHERE 限定当前公司(覆盖外部传入),data 剥离公司列(禁止经 update 改公司归属) */
         $companyField = Field::companyId(static::class);
         if (!superEmpty($companyField)) {
-            $where[$companyField] ??= companyId();
+            $where[$companyField] ??= companyKey();
             unset($data[$companyField]);
         }
 
@@ -290,7 +290,7 @@ abstract class BaseModel
         /** 受管表强制写入当前公司 —— 覆盖外部传入值,防止越权写他人公司 */
         $companyField = Field::companyId(static::class);
         if (!superEmpty($companyField)) {
-            $data[$companyField] ??= companyId();
+            $data[$companyField] ??= companyKey();
         }
 
         /** 自动注入 create_* 审计字段(INSERT 不写 update */
@@ -371,7 +371,7 @@ abstract class BaseModel
             $where[$deleteField] ??= 0;
         }
 
-        /** 受管表强制:WHERE 限定可见公司(覆盖外部传入),防止越权查他人公司;单/多由 auto.company.multi 决定,多主体走 whereIn */
+        /** 受管表强制:WHERE 限定可见公司(覆盖外部传入),防止越权查他人公司;单/多由 auto.company.multi 决定,多主体走 whereIn;值的类型跟着隔离列走(id 或 code) */
         $companyField = Field::companyId(static::class);
         if (!superEmpty($companyField)) {
             $where[$companyField] ??= companyValue();

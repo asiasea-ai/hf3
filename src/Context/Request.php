@@ -18,6 +18,7 @@ final class Request
     private const string KEY_SOURCE = 'es37_source';
     private const string KEY_COMPANY_CODE = 'es37_company_code';
     private const string KEY_COMPANY_IDS = 'es37_company_ids';
+    private const string KEY_COMPANY_CODES = 'es37_company_codes';
 
 
     /** HTTP 请求来源标识 */
@@ -180,5 +181,16 @@ final class Request
     {
         $ids = Context::get(Request::KEY_COMPANY_IDS);
         return is_array($ids) ? $ids : [];
+    }
+
+    public static function setCompanyCodes(array $companyCodes): void
+    {
+        Context::set(Request::KEY_COMPANY_CODES, array_values($companyCodes));
+    }
+
+    public static function getCompanyCodes(): array
+    {
+        $codes = Context::get(Request::KEY_COMPANY_CODES);
+        return is_array($codes) ? $codes : [];
     }
 }
